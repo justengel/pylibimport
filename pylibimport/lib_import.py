@@ -6,6 +6,7 @@ import tempfile
 import shutil
 import tarfile
 import importlib
+import platform
 
 from packaging.version import parse as parse_version
 
@@ -15,8 +16,14 @@ from pip._internal import main as pip_main
 from .utils import make_import_name, get_name_version, is_python_package
 
 
+__all__ = ['VersionImporter']
+
+
 class VersionImporter(object):
     """Import modules that have the same name, but different versions."""
+
+    PYTHON_VERSION = "{}.{}.{}-{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro,
+                                          platform.architecture()[0])
 
     DEFAULT_PYTHON_EXTENSIONS = ['.py', '.pyc', '.pyd']
 
@@ -54,6 +61,9 @@ class VersionImporter(object):
     @target_dir.setter
     def target_dir(self, target_dir):
         self.init(target_dir)
+
+    def make_import_path(self, libname, libversion):
+        return os.path.join(self.target_dir, self.PYTHON_VERSION, libname, libversion)
 
     def init(self, target_dir=None):
         """Initialize this importer.
@@ -226,7 +236,7 @@ class VersionImporter(object):
         except:
             pass
         try:
-            import_path = os.path.join(self.target_dir, name, version)
+            import_path = self.make_import_path(name, version)
             shutil.rmtree(import_path)
         except:
             pass
@@ -284,7 +294,7 @@ class VersionImporter(object):
                 return modules[version]
 
         # Check if import name is available
-        import_path = os.path.join(self.target_dir, name, version)
+        import_path = self.make_import_path(name, version)
         if os.path.exists(import_path):
             try:
                 # Import the module
@@ -317,7 +327,7 @@ class VersionImporter(object):
     def py_import(self, name, version, path):
         """Return the normal python import."""
         # Get the import path
-        import_path = os.path.join(self.target_dir, name, version)
+        import_path = self.make_import_path(name, version)
 
         # Make the path exist in the target dir
         if not os.path.exists(import_path):
@@ -336,7 +346,7 @@ class VersionImporter(object):
     def zip_import(self, name, version, path):
         """Import whl or zip files."""
         # Get the import path
-        import_path = os.path.join(self.target_dir, name, version)
+        import_path = self.make_import_path(name, version)
 
         # Extract to import location.
         if not os.path.exists(import_path):
@@ -357,7 +367,7 @@ class VersionImporter(object):
     def whl_install(self, name, version, path):
         """Import whl or zip files."""
         # Get the import path
-        import_path = os.path.join(self.target_dir, name, version)
+        import_path = self.make_import_path(name, version)
 
         # Install the wheel file to the target directory
         with self.original_system(import_path, reset_modules=False):

@@ -74,7 +74,7 @@ def test_delete_module():
     import shutil
     v = make_importer()
 
-    module_path = os.path.join(v.target_dir, 'dynamicmethod', '1.0.2')
+    module_path = v.make_import_path('dynamicmethod', '1.0.2')
     if os.path.exists(module_path):
         shutil.rmtree(module_path)
 
@@ -89,9 +89,9 @@ def test_delete_module():
     m1 = v.import_module('dynamicmethod-1.0.2.zip')
     module = v.import_module('dynamicmethod')  # Will be latest version in import_dir
     assert module is not None
-    assert os.path.exists(os.path.join(v.target_dir, 'dynamicmethod', '1.0.4'))
+    assert os.path.exists(v.make_import_path('dynamicmethod', '1.0.4'))
     v.delete_module('dynamicmethod')  # Will delete the latest version.
-    assert not os.path.exists(os.path.join(v.target_dir, 'dynamicmethod', '1.0.4'))
+    assert not os.path.exists(v.make_import_path('dynamicmethod', '1.0.4'))
 
     # Delete as name version
     module = v.import_module('dynamicmethod', '1.0.2')  # Will be latest version in import_dir
