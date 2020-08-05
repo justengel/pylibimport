@@ -2,13 +2,15 @@ import os
 import re
 
 
-__all__ = ['make_import_name', 'get_name_version', 'is_python_package']
+__all__ = ['EXTENSIONS', 'make_import_name', 'get_name_version', 'is_python_package']
 
+
+EXTENSIONS = ['.whl', '.tar.gz', '.tar', '.zip', '.dist-info']
 
 WHEEL_INFO_RE = re.compile(
-    r"""^(?P<namever>(?P<name>.+?)-(?P<version>\d.*?))(-(?P<build>\d.*?))?
-     -(?P<pyver>[a-z].+?)-(?P<abi>.+?)-(?P<plat>.+?)(\.whl|\.dist-info|\.zip|\.tar|\.tar\.gz)?$""",
-    re.VERBOSE).match
+        r"""^(?P<namever>(?P<name>.+?)-(?P<version>\d.*?))(-(?P<build>\d.*?))?
+         -(?P<pyver>[a-z].+?)-(?P<abi>.+?)-(?P<plat>.+?)(\.whl|\.dist-info|\.zip|\.tar\.gz|\.tar)?$""",
+        re.VERBOSE).match
 
 NAME_VER_RE = re.compile(
         r"""^(?P<namever>(?P<name>.+?)-(?P<version>[.a-zA-Z0-9]*))""",
@@ -47,7 +49,7 @@ def get_name_version(filename):
         attrs = WHEEL_INFO_RE(filename).groupdict()
     except:
         try:
-            if filename.endswith('.tar.gz'):
+            if '.tar.gz' in filename:  # .tar.gz has two "." so the extension needs to be removed twice.
                 filename = os.path.splitext(filename)[0]
             attrs = NAME_VER_RE(os.path.splitext(filename)[0]).groupdict()
         except:
@@ -57,9 +59,10 @@ def get_name_version(filename):
                 attrs['name'] = split[0]
                 attrs['version'] = split[1]
 
-    if not attrs['version']:
-        attrs['version'] = '0.0.0'
-    return attrs['name'], attrs['version']
+    # Get a version
+    version = attrs.get('version', '0.0.0')
+
+    return attrs['name'], version
 
 
 def is_python_package(directory):
