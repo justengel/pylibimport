@@ -128,5 +128,5 @@ You can also download a package in a similar way
 
 .. code-block:: sh
 
-    >>> python -m pylibimport.download requests 2.23.0
+    >>> python -m pylibimport.download requests -v 2.23.0
     requests-2.23.0-py2.py3-none-any.whl saved!

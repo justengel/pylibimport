@@ -91,13 +91,13 @@ class HttpListVersions(HTMLParser):
         return parser.saved_data
 
     @classmethod
-    def download(cls, package, version, download_dir='.',
+    def download(cls, package, version=None, download_dir='.',
                  index_url='https://pypi.org/simple/', extensions=None, **kwargs):
         """Return a series of package versions.
 
         Args:
             package (str): Name of the package/library you want to ge the versions for (Example: "requests").
-            version (str): Version number to find and download.
+            version (str)[None]: Version number to find and download.
             download_dir (str)['.']: Download directory.
             index_url (str) ['https://pypi.org/simple/']: Simple url to get the package and it's versions from.
             extensions (list/str) [None]: List of allowed extensions (Example: [".whl", ".tar.gz"]).
@@ -106,7 +106,10 @@ class HttpListVersions(HTMLParser):
             data (OrderedDict): Dictionary of {(package name, version): href}
         """
         versions = cls.get_versions(package, index_url=index_url, extensions=extensions, **kwargs)
-        href = versions.get((package, version), None)
+        if version is None:
+            href = versions[list(versions)[-1]]  # Get latest version
+        else:
+            href = versions.get((package, version), None)
         if href is None:
             raise ValueError('Invalid version given. Version not found!')
 
