@@ -102,11 +102,31 @@ and the pathing gets messed up. I have not had any success importing numpy witho
 I tried a lot of different ways on Windows 10 with Python 3.8 - 64 Bit.
 I think I even tried Numpy found at https://www.lfd.uci.edu/~gohlke/pythonlibs/.
 
+My ultimate solution is to use pip to install the library to a location and point to that location.
+
 
 Future
 ======
 
 I would like to learn more about python's import system. I would like to research how zipimport
 works with the finder and loader. Unfortunately, I know myself, and it's probably not going to happen.
-In the end Python will eventually add version import support anyway. Future Python syntax will probably be
-like qml :code:`import custom 1.0.0`.
+In the end I think Python will eventually add version import support anyway or this will be done by other pipenv
+library or something. Future Python (4.0) syntax will probably be like qml :code:`import custom 1.0.0` where the
+version is optional. That is just my guess.
+
+
+List and Download Versions
+==========================
+
+This library can now find versions from a simple pypi index.
+
+.. code-block:: sh
+
+    >>> python -m pylibimport.get_versions requests
+
+You can also download a package in a similar way
+
+.. code-block:: sh
+
+    >>> python -m pylibimport.download requests 2.23.0
+    requests-2.23.0-py2.py3-none-any.whl saved!
