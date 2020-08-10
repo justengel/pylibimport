@@ -2,6 +2,7 @@ import os
 import requests
 import contextlib
 from collections import OrderedDict
+from urllib.parse import urljoin
 from html.parser import HTMLParser
 
 from pylibimport.utils import get_name_version, EXTENSIONS
@@ -48,9 +49,7 @@ class HttpListVersions(HTMLParser):
             href = attrs.get('href', '')
 
         if tag == 'a' and (len(self.extensions) == 0 or any(ext in href for ext in self.extensions)):
-            if not href.startswith('http'):
-                href = self.index_url + href
-
+            href = urljoin(self.index_url, href)
             name, version = get_name_version(href)
             if (name, version) not in self.saved_data:
                 self.saved_data[(name, version)] = href
@@ -92,7 +91,7 @@ class HttpListVersions(HTMLParser):
 
     @classmethod
     def download(cls, package, version=None, download_dir='.',
-                 index_url='https://pypi.org/simple/', extensions=None, **kwargs):
+                 index_url='https://pypi.org/simple/', extensions=None, chunk_size=1024, **kwargs):
         """Return a series of package versions.
 
         Args:
@@ -101,6 +100,7 @@ class HttpListVersions(HTMLParser):
             download_dir (str)['.']: Download directory.
             index_url (str) ['https://pypi.org/simple/']: Simple url to get the package and it's versions from.
             extensions (list/str) [None]: List of allowed extensions (Example: [".whl", ".tar.gz"]).
+            chunk_size (int)[1024]: Save the file with this chunk size.
 
         Returns:
             data (OrderedDict): Dictionary of {(package name, version): href}
@@ -113,13 +113,14 @@ class HttpListVersions(HTMLParser):
         if href is None:
             raise ValueError('Invalid version given. Version not found!')
 
-        r = requests.get(href)
-
         filename = cls.href_as_filename(href)
         filename = os.path.abspath(os.path.join(download_dir, filename))
 
+        r = requests.get(href)
+
         with open(filename, 'wb') as f:
-            f.write(r.content)
+            for chunk in r.iter_content(chunk_size=chunk_size):
+                f.write(chunk)
 
         return filename
 
