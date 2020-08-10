@@ -153,7 +153,9 @@ class VersionImporter(object):
         yield
 
         if reset_modules:
-            sys.modules = modules
+            # sys.modules = modules  # For some reason this causes conflicts with relative imports?
+            sys.modules.clear()
+            sys.modules.update(modules)
         sys.path = paths
         sys.path_importer_cache = path_cache
 
@@ -320,7 +322,7 @@ class VersionImporter(object):
                     pass
 
                 return module
-            except Exception as err:
+            except (ImportError, Exception) as err:
                 self.error(path, err)
                 return
 
@@ -370,18 +372,17 @@ class VersionImporter(object):
         import_path = self.make_import_path(name, version)
 
         # Install the wheel file to the target directory
-        with self.original_system(import_path, reset_modules=False):
+        with self.original_system(import_path, reset_modules=self.reset_modules):
             try:
-                if not os.path.exists(import_path):
-                    os.makedirs(import_path)
-                    args = ['install', '--target', import_path, path]
-                    if not self.install_dependencies:
-                        args.insert(1, '--no-deps')
+                os.makedirs(import_path, exist_ok=True)
+                args = ['install', '--target', import_path, path]
+                if not self.install_dependencies:
+                    args.insert(1, '--no-deps')
 
-                    # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
-                    proc = mp.Process(target=pip_main, args=(args,), name='pip_install')
-                    proc.start()
-                    proc.join()
+                # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
+                proc = mp.Process(target=pip_main, args=(args,), name='pip_install')
+                proc.start()
+                proc.join()
             except Exception as err:
                 self.error(path, err)
                 return
