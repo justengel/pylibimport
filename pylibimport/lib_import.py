@@ -7,16 +7,25 @@ import shutil
 import tarfile
 import importlib
 import platform
-
 from packaging.version import parse as parse_version
-
 import multiprocessing as mp  # Multiprocessing will work in PyInstaller executable
+
+from .utils import make_import_name, get_name_version, is_python_package
+
+if getattr(sys, 'frozen', False):
+    import site
+    if not getattr(site, '__file__', None):
+        site.__file__ = sys.executable
+        if not getattr(site, 'USER_BASE', None):
+            site.USER_BASE = sys.executable
+    if not getattr(site, 'USER_SITE', None):
+        site.USER_SITE = sys.executable
+    if not getattr(sys, 'prefix', None):
+        sys.prefix = sys.executable
 try:
     from pip._internal import main as pip_main
 except (ImportError, AttributeError, Exception):
     from pip import main as pip_main
-
-from .utils import make_import_name, get_name_version, is_python_package
 
 
 __all__ = ['VersionImporter']
