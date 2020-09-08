@@ -11,7 +11,10 @@ import platform
 from packaging.version import parse as parse_version
 
 import multiprocessing as mp  # Multiprocessing will work in PyInstaller executable
-from pip._internal import main as pip_main
+try:
+    from pip._internal import main as pip_main
+except (ImportError, AttributeError, Exception):
+    from pip import main as pip_main
 
 from .utils import make_import_name, get_name_version, is_python_package
 
@@ -267,6 +270,10 @@ class VersionImporter(object):
                 self.error(orig_name, ModuleNotFoundError(orig_name))
                 return
 
+        # Set version
+        if not version:
+            version = '0.0.0'
+
         # Check if target_dir
         if self.target_dir is None:
             self.init()
@@ -287,9 +294,6 @@ class VersionImporter(object):
 
     def _import_module(self, name, version, path, subpackage=None):
         """Import the given module name from the given import path."""
-        if not version:
-            version = '0.0.0'
-
         if name in self.modules:
             modules = self.modules[name]
             if version in modules:
@@ -305,7 +309,6 @@ class VersionImporter(object):
                         module = importlib.import_module('.'.join((name, str(subpackage))))  # module = __import__(name)
                     else:
                         module = importlib.import_module(name)  # module = __import__(name)
-
 
                 # Save in sys.modules with version
                 import_name = make_import_name(name, version)
