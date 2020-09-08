@@ -8,7 +8,20 @@ from html.parser import HTMLParser
 from pylibimport.utils import get_name_version, EXTENSIONS
 
 
-__all__ = ['HttpListVersions']
+__all__ = ['uri_exists', 'HttpListVersions']
+
+
+def uri_exists(uri):
+    """Return if the given URI exists."""
+    try:
+        with requests.get(str(uri), stream=True) as response:
+            try:
+                response.raise_for_status()
+                return True
+            except requests.exceptions.HTTPError:
+                return False
+    except requests.exceptions.ConnectionError:
+        return False
 
 
 class HttpListVersions(HTMLParser):
@@ -40,6 +53,10 @@ class HttpListVersions(HTMLParser):
         self.extensions = extensions
         self.saved_data = OrderedDict()
         super().__init__(**kwargs)
+
+    def uri_exists(self, index_url=None):
+        """Return if the given URL/URI exists."""
+        return uri_exists(index_url or self.index_url)
 
     def handle_starttag(self, tag, attrs):
         href = ''
@@ -103,7 +120,7 @@ class HttpListVersions(HTMLParser):
             chunk_size (int)[1024]: Save the file with this chunk size.
 
         Returns:
-            data (OrderedDict): Dictionary of {(package name, version): href}
+            filename (str): Filename of the downloaded file.
         """
         versions = cls.get_versions(package, index_url=index_url, extensions=extensions, **kwargs)
         if version is None:
