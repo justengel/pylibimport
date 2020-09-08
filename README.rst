@@ -81,6 +81,22 @@ allowing imports from other files.
     # Python has a bunch of import hooks (ZipImporter) which could make this better?
 
 
+Subpackages
+===========
+
+Now you can import sub packages as well.
+
+.. code-block:: python
+
+    import pylibimport
+
+    importer = pylibimport.VersionImporter()
+
+    module = importer.import_module('requests', '2.23.0', 'auth')
+    assert hasattr(module, 'HTTPBasicAuth')
+
+
+
 Problems
 ========
 
@@ -113,6 +129,11 @@ works with the finder and loader. Unfortunately, I know myself, and it's probabl
 In the end I think Python will eventually add version import support anyway or this will be done by other pipenv
 library or something. Future Python (4.0) syntax will probably be like qml :code:`import custom 1.0.0` where the
 version is optional. That is just my guess.
+
+My very long term goal is to make this a virtual environment replacemnt. Right now I have 50 venv's on my computer.
+I have one for every library that I develop. With this I also have a bunch of the same libraries installed.
+My development environment is filled with duplicate libraries. This library can solve this problem. I do not have a
+lot of time to develop this functionality, so it will take me a long time.
 
 
 List and Download Versions

@@ -248,7 +248,7 @@ class VersionImporter(object):
         """Handle an import error."""
         raise err
 
-    def import_module(self, name, version=None):
+    def import_module(self, name, version=None, subpackage=None):
         """Import the given module or package."""
         # Check if valid path
         orig_name = name
@@ -272,20 +272,20 @@ class VersionImporter(object):
             self.init()
 
         # Check if import name is available
-        module = self._import_module(name, version, path)
+        module = self._import_module(name, version, path, subpackage)
         if module is not None:
             return module
 
         # Check extension
         ext = os.path.splitext(path)[-1].lower()
         if ext in self.python_extensions or (ext == '' and is_python_package(path)):
-            return self.py_import(name, version, path)
+            return self.py_import(name, version, path, subpackage)
         elif ext == '.zip' or tarfile.is_tarfile(path):
-            return self.zip_import(name, version, path)
+            return self.zip_import(name, version, path, subpackage)
         elif ext == '.whl':
-            return self.whl_install(name, version, path)
+            return self.whl_install(name, version, path, subpackage)
 
-    def _import_module(self, name, version, path):
+    def _import_module(self, name, version, path, subpackage=None):
         """Import the given module name from the given import path."""
         if not version:
             version = '0.0.0'
@@ -301,7 +301,11 @@ class VersionImporter(object):
             try:
                 # Import the module
                 with self.original_system(import_path, reset_modules=self.reset_modules):
-                    module = importlib.import_module(name)  # module = __import__(name)
+                    if subpackage:
+                        module = importlib.import_module('.'.join((name, str(subpackage))))  # module = __import__(name)
+                    else:
+                        module = importlib.import_module(name)  # module = __import__(name)
+
 
                 # Save in sys.modules with version
                 import_name = make_import_name(name, version)
@@ -326,7 +330,7 @@ class VersionImporter(object):
                 self.error(path, err)
                 return
 
-    def py_import(self, name, version, path):
+    def py_import(self, name, version, path, subpackage=None):
         """Return the normal python import."""
         # Get the import path
         import_path = self.make_import_path(name, version)
@@ -343,9 +347,9 @@ class VersionImporter(object):
                 else:
                     shutil.copy(path, import_path)
 
-        return self._import_module(name, version, path)
+        return self._import_module(name, version, path, subpackage)
 
-    def zip_import(self, name, version, path):
+    def zip_import(self, name, version, path, subpackage=None):
         """Import whl or zip files."""
         # Get the import path
         import_path = self.make_import_path(name, version)
@@ -364,30 +368,39 @@ class VersionImporter(object):
                         shutil.move(os.path.join(nested_path, np), os.path.join(import_path, np))
                     # shutil.rmtree(nested_path)
 
-        return self._import_module(name, version, path)
+        return self._import_module(name, version, path, subpackage)
 
-    def whl_install(self, name, version, path):
+    def whl_install(self, name, version, path, subpackage=None):
         """Import whl or zip files."""
         # Get the import path
         import_path = self.make_import_path(name, version)
 
         # Install the wheel file to the target directory
+        try:
+            os.makedirs(import_path, exist_ok=True)
+        except:
+            pass
         with self.original_system(import_path, reset_modules=self.reset_modules):
             try:
-                os.makedirs(import_path, exist_ok=True)
                 args = ['install', '--target', import_path, path]
                 if not self.install_dependencies:
                     args.insert(1, '--no-deps')
 
                 # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
-                proc = mp.Process(target=pip_main, args=(args,), name='pip_install')
+                proc = mp.Process(target=pip_main, args=(args,))  #, name='pip_install')
                 proc.start()
                 proc.join()
-            except Exception as err:
+                if proc.exitcode != 0:
+                    raise ImportError('Could not import {}'.format(name))
+            except (ImportError, Exception) as err:
+                try:
+                    shutil.rmtree(import_path)
+                except:
+                    pass
                 self.error(path, err)
                 return
 
-        return self._import_module(name, version, path)
+        return self._import_module(name, version, path, subpackage)
 
     def cleanup(self):
         """Properly close the tempfile directory."""
