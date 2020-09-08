@@ -1,2 +1,2 @@
 packaging>=20.3
-requests>=2.23.0
+requests>=2.18.2
