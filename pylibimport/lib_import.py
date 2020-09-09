@@ -260,7 +260,7 @@ class VersionImporter(object):
         """Handle an import error."""
         raise err
 
-    def import_module(self, name, version=None, subpackage=None):
+    def import_module(self, name, version=None, import_chain=None):
         """Import the given module or package."""
         # Check if valid path
         orig_name = name
@@ -288,23 +288,25 @@ class VersionImporter(object):
             self.init()
 
         # Check if import name is available
-        module = self._import_module(name, version, path, subpackage)
+        module = self._import_module(name, version, path, import_chain)
         if module is not None:
             return module
 
         # Check extension
         ext = os.path.splitext(path)[-1].lower()
         if ext in self.python_extensions or (ext == '' and is_python_package(path)):
-            return self.py_import(name, version, path, subpackage)
+            return self.py_import(name, version, path, import_chain)
         elif ext == '.zip' or tarfile.is_tarfile(path):
-            return self.zip_import(name, version, path, subpackage)
+            return self.zip_import(name, version, path, import_chain)
         elif ext == '.whl':
-            return self.whl_install(name, version, path, subpackage)
+            return self.whl_install(name, version, path, import_chain)
 
-    def _import_module(self, name, version, path, subpackage=None):
+    def _import_module(self, name, version, path, import_chain=None):
         """Import the given module name from the given import path."""
-        if name in self.modules:
-            modules = self.modules[name]
+        if import_chain is None:
+            import_chain = name
+        if import_chain in self.modules:
+            modules = self.modules[import_chain]
             if version in modules:
                 return modules[version]
 
@@ -314,22 +316,19 @@ class VersionImporter(object):
             try:
                 # Import the module
                 with self.original_system(import_path, reset_modules=self.reset_modules):
-                    if subpackage:
-                        module = importlib.import_module('.'.join((name, str(subpackage))))  # module = __import__(name)
-                    else:
-                        module = importlib.import_module(name)  # module = __import__(name)
+                    module = importlib.import_module(import_chain)  # module = __import__(name)
 
                 # Save in sys.modules with version
-                import_name = make_import_name(name, version)
+                import_name = make_import_name(import_chain, version)
                 if not self.reset_modules:
                     self.rename_module(name, import_name)
                 else:
                     self.add_module(import_name, module)
 
                 # Save module to my modules
-                if name not in self.modules:
-                    self.modules[name] = {}
-                self.modules[name][version] = module
+                if import_chain not in self.modules:
+                    self.modules[import_chain] = {}
+                self.modules[import_chain][version] = module
 
                 # Save the import version
                 try:
@@ -342,7 +341,7 @@ class VersionImporter(object):
                 self.error(path, err)
                 return
 
-    def py_import(self, name, version, path, subpackage=None):
+    def py_import(self, name, version, path, import_chain=None):
         """Return the normal python import."""
         # Get the import path
         import_path = self.make_import_path(name, version)
@@ -359,9 +358,9 @@ class VersionImporter(object):
                 else:
                     shutil.copy(path, import_path)
 
-        return self._import_module(name, version, path, subpackage)
+        return self._import_module(name, version, path, import_chain)
 
-    def zip_import(self, name, version, path, subpackage=None):
+    def zip_import(self, name, version, path, import_chain=None):
         """Import whl or zip files."""
         # Get the import path
         import_path = self.make_import_path(name, version)
@@ -380,9 +379,9 @@ class VersionImporter(object):
                         shutil.move(os.path.join(nested_path, np), os.path.join(import_path, np))
                     # shutil.rmtree(nested_path)
 
-        return self._import_module(name, version, path, subpackage)
+        return self._import_module(name, version, path, import_chain)
 
-    def whl_install(self, name, version, path, subpackage=None):
+    def whl_install(self, name, version, path, import_chain=None):
         """Import whl or zip files."""
         # Get the import path
         import_path = self.make_import_path(name, version)
@@ -412,7 +411,7 @@ class VersionImporter(object):
                 self.error(path, err)
                 return
 
-        return self._import_module(name, version, path, subpackage)
+        return self._import_module(name, version, path, import_chain)
 
     def cleanup(self):
         """Properly close the tempfile directory."""

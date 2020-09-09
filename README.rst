@@ -82,7 +82,7 @@ allowing imports from other files.
 
 
 Subpackages
-===========
+~~~~~~~~~~~
 
 Now you can import sub packages as well.
 
@@ -92,7 +92,7 @@ Now you can import sub packages as well.
 
     importer = pylibimport.VersionImporter()
 
-    module = importer.import_module('requests', '2.23.0', 'auth')
+    module = importer.import_module('requests', '2.23.0', 'requests.auth')
     assert hasattr(module, 'HTTPBasicAuth')
 
 

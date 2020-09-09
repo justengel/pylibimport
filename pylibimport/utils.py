@@ -22,7 +22,12 @@ _CONVERT_UNDERSCORE = re.compile("[^\w]+")
 def make_import_name(name, version=''):
     """Return an import name using the name and version."""
     if version:
-        return '{}_{}'.format(name, _CONVERT_UNDERSCORE.sub('_', str(version)))
+        converted_version = _CONVERT_UNDERSCORE.sub('_', str(version))
+        if '.' in name:
+            first, other = name.split('.', 1)
+            return '{}_{}.{}'.format(first, converted_version, other)
+        else:
+            return '{}_{}'.format(name, converted_version)
     else:
         return name
 
