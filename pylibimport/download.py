@@ -12,8 +12,11 @@ if __name__ == '__main__':
     P.add_argument('-i', '--index_url', type=str, default='https://pypi.org/simple/', help='Index url to search.')
     P.add_argument('-e', '--extensions', metavar='N', type=str, nargs='+',
                    help='Allowed extensions (".whl", ".tar.gz")')
+    P.add_argument('--min_version', type=str, default=None, help='Minimum version number to allow')
+    P.add_argument('--exclude', metavar='N', type=str, nargs='*', help='Exclude versions')
     ARGS = P.parse_args()
 
     FILENAME = HttpListVersions.download(ARGS.package, version=ARGS.version, download_dir=ARGS.download_dir,
-                                         index_url=ARGS.index_url, extensions=ARGS.extensions)
+                                         index_url=ARGS.index_url, extensions=ARGS.extensions,
+                                         min_version=ARGS.min_version, exclude=ARGS.exclude)
     print(FILENAME, 'saved!')
