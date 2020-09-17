@@ -5,9 +5,9 @@ def make_importer():
     from pylibimport.lib_import import VersionImporter
     v = VersionImporter(download_dir='./sub/import_dir/',  # Where to find available imports
                         install_dir='./sub/target_dir',  # Where to save imports/installs to
-                        install_dependencies=False,  # .whl files install dependencies in target_dir?
+                        install_dependencies=False,  # .whl files install dependencies in install_dir?
                         reset_modules=True)              # Reset sys.modules after import removing dependencies?
-    v.cleanup()  # Delete the target_dir (Needed for testing)
+    v.cleanup()  # Delete the install_dir (Needed for testing)
     v.init()
     v.error = lambda *args: None
     return v
@@ -43,9 +43,9 @@ def test_find_module():
 
 def test_import_path():
     v = make_importer()
-    v.import_dir = '.'
+    v.download_dir = '.'
 
-    # Use path not connected to import_dir
+    # Use path not connected to download_dir
     custom = v.import_module(os.path.abspath('./sub/import_dir/custom.py'))
     assert custom is not None
     assert custom.run_custom() == 'hello'
@@ -87,14 +87,14 @@ def test_delete_installed():
 
     # Delete as name
     m1 = v.import_module('dynamicmethod-1.0.2.zip')
-    module = v.import_module('dynamicmethod')  # Will be latest version in import_dir
+    module = v.import_module('dynamicmethod')  # Will be latest version in download_dir
     assert module is not None
     assert os.path.exists(v.make_import_path('dynamicmethod', '1.0.4'))
     v.delete_installed('dynamicmethod')  # Will delete the latest version.
     assert not os.path.exists(v.make_import_path('dynamicmethod', '1.0.4'))
 
     # Delete as name version
-    module = v.import_module('dynamicmethod', '1.0.2')  # Will be latest version in import_dir
+    module = v.import_module('dynamicmethod', '1.0.2')  # Will be latest version in download_dir
     assert module is not None
     assert os.path.exists(module_path)
     v.delete_installed('dynamicmethod', '1.0.2')  # Will delete the latest version.

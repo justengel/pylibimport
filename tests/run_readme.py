@@ -9,7 +9,7 @@ def run_simple():
     print(custom.run_custom())
     # 'hello custom1'
 
-    # Remove the saved module from the target_dir
+    # Remove the saved module from the install_dir
     importer.delete_installed(custom)
 
     # Give a version number to the module

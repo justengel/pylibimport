@@ -4,9 +4,9 @@ pylibimport
 Python utility for importing packages with the same name, but different version.
 
 VersionImporter Attributes:
-  * import_dir - Directory to find import names and files
-  * target_dir - Directory to save/install modules by names and version
-  * install_dependencies - If True .whl files will install dependencies to the target_dir
+  * download_dir - Directory to find import names and files
+  * install_dir - Directory to save/install modules by names and version
+  * install_dependencies - If True .whl files will install dependencies to the install_dir
   * reset_modules - Reset sys.modules after every import (Will still add custom_0_0_0).
 
    * This helps prevent dependencies from being saved to sys.modules
@@ -29,13 +29,13 @@ Simple import example.
 
     import pylibimport
 
-    importer = pylibimport.VersionImporter(target_dir='./sub/target_dir')
+    importer = pylibimport.VersionImporter(install_dir='./sub/target_dir')
 
     custom = importer.import_module('./sub/custom.py')
     print(custom.run_custom())
     # 'hello custom1'
 
-    # Remove the saved module from the target_dir
+    # Remove the saved module from the install_dir
     importer.delete_installed(custom)
 
     # Give a version number to the module
@@ -58,7 +58,7 @@ This library also works across multiple files.
     # prep_modules.py
     import pylibimport
 
-    importer = pylibimport.VersionImporter(target_dir='./sub/target_dir')
+    importer = pylibimport.VersionImporter(install_dir='./sub/target_dir')
     importer.import_module('./sub/custom.py', '1.0.0')  # Give a version number to the module
     importer.import_module('./sub/import_dir/custom.py', '0.0.0')
 
