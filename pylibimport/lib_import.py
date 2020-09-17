@@ -13,7 +13,7 @@ from packaging.version import parse as parse_version
 import multiprocessing as mp  # Multiprocessing will work in PyInstaller executable
 
 from .utils import make_import_name, get_name_version, is_python_package
-from .get_versions import HttpListVersions
+from .get_versions import HttpListVersions, uri_exists
 
 
 if getattr(sys, 'frozen', False):
@@ -305,6 +305,10 @@ class VersionImporter(object):
 
     delete_module = delete_installed
 
+    def uri_exists(self, index_url=None):
+        """Return if the given URL/URI exists."""
+        return uri_exists(index_url or self.index_url)
+
     def install(self, package, version=None):
         """Install a downloaded package.
 
@@ -348,6 +352,25 @@ class VersionImporter(object):
         except Exception as err:
             self.error(None, err)
             return None
+
+    def get_versions(self, package, index_url=None, min_version=None, exclude=None):
+        """Return a series of package versions.
+
+        Args:
+            package (str): Name of the package/library you want to ge the versions for (Example: "requests").
+            index_url (str) ['https://pypi.org/simple/']: Simple url to get the package and it's versions from.
+            min_version (str)[None]: Minimum version to allow.
+            exclude (list)[None]: List of versions that are excluded.
+
+        Returns:
+            data (OrderedDict): Dictionary of {(package name, version): href}
+        """
+        try:
+            index_url = index_url or self.index_url
+            return HttpListVersions.get_versions(package, index_url=index_url, min_version=min_version, exclude=exclude)
+        except Exception as err:
+            self.error(None, err)
+            return {}
 
     def error(self, path, err):
         """Handle an import error."""
