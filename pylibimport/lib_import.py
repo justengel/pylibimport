@@ -230,7 +230,7 @@ class VersionImporter(object):
         package_dir = os.path.join(download_dir, package + '*.*')
         for filename in glob.iglob(package_dir):
             name, version = get_name_version(filename)
-            if (name, version) not in d or filename.endswith('.whl'):
+            if (name, version) not in d:
                 d[(name, version)] = os.path.abspath(filename)
 
         return d
