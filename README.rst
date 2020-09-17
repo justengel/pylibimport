@@ -36,7 +36,7 @@ Simple import example.
     # 'hello custom1'
 
     # Remove the saved module from the target_dir
-    importer.delete_module(custom)
+    importer.delete_installed(custom)
 
     # Give a version number to the module
     custom = importer.import_module('./sub/custom.py', '1.0.0')

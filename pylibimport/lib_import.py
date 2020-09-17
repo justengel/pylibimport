@@ -1,16 +1,19 @@
 import os
 import sys
-import contextlib
 import copy
+import glob
+import contextlib
 import tempfile
 import shutil
 import tarfile
 import importlib
 import platform
+from collections import OrderedDict
 from packaging.version import parse as parse_version
 import multiprocessing as mp  # Multiprocessing will work in PyInstaller executable
 
 from .utils import make_import_name, get_name_version, is_python_package
+
 
 if getattr(sys, 'frozen', False):
     import site
@@ -22,6 +25,7 @@ if getattr(sys, 'frozen', False):
         site.USER_SITE = sys.executable
     if not getattr(sys, 'prefix', None):
         sys.prefix = sys.executable
+
 try:
     from pip._internal import main as pip_main
 except (ImportError, AttributeError, Exception):
@@ -39,15 +43,15 @@ class VersionImporter(object):
 
     DEFAULT_PYTHON_EXTENSIONS = ['.py', '.pyc', '.pyd']
 
-    def __init__(self, import_dir=None, target_dir=None, python_extensions=None,
+    def __init__(self, download_dir=None, install_dir=None, python_extensions=None,
                  install_dependencies=False, reset_modules=True, **kwargs):
         """Initialize the library
 
         Args:
-            import_dir (str)[None]: Name of the import directory.
-            target_dir (str)[None]: Name of the directory to install the packages to.
+            download_dir (str)[None]: Name of the import directory.
+            install_dir (str)[None]: Name of the directory to install the packages to.
             python_extensions (list)[None]: Available python extensions to try to import normally.
-            install_dependencies (bool)[False]: If True .whl files will install dependencies into the target_dir.
+            install_dependencies (bool)[False]: If True .whl files will install dependencies into the install_dir.
             reset_modules (bool)[True]: Reset the state of sys.modules after importing.
                 Dependencies will not be loaded into sys.modules.
             **kwargs (dict): Unused given named arguments.
@@ -55,49 +59,49 @@ class VersionImporter(object):
         if python_extensions is None:
             python_extensions = self.DEFAULT_PYTHON_EXTENSIONS
 
-        self.import_dir = import_dir
-        self._target_dir = None
+        self.download_dir = download_dir
+        self._install_dir = None
         self.python_extensions = python_extensions
         self.install_dependencies = install_dependencies
         self.reset_modules = reset_modules
         self.modules = {}
 
-        if target_dir is not None:
-            self.init(target_dir)
+        if install_dir is not None:
+            self.init(install_dir)
 
     @property
-    def target_dir(self):
+    def install_dir(self):
         """Return the name of the target save directory."""
-        return self._target_dir
+        return self._install_dir
 
-    @target_dir.setter
-    def target_dir(self, target_dir):
-        self.init(target_dir)
+    @install_dir.setter
+    def install_dir(self, install_dir):
+        self.init(install_dir)
 
     def make_import_path(self, libname, libversion):
-        return os.path.join(self.target_dir, self.PYTHON_VERSION, libname, libversion)
+        return os.path.join(self.install_dir, self.PYTHON_VERSION, libname, libversion)
 
-    def init(self, target_dir=None):
+    def init(self, install_dir=None):
         """Initialize this importer.
 
         Args:
-            target_dir (str): Target directory. If None and self.target_dir is None use a temporary directory.
+            install_dir (str): Target directory. If None and self.install_dir is None use a temporary directory.
         """
-        if target_dir is None:
-            target_dir = self._target_dir
-        if target_dir is None:
-            target_dir = os.path.join(tempfile.gettempdir(), 'pylibimport')
-        elif os.path.isfile(target_dir):
-            target_dir = os.path.dirname(target_dir)
+        if install_dir is None:
+            install_dir = self._install_dir
+        if install_dir is None:
+            install_dir = os.path.join(tempfile.gettempdir(), 'pylibimport')
+        elif os.path.isfile(install_dir):
+            install_dir = os.path.dirname(install_dir)
 
         # Remove the old directory
-        self.remove_path(self._target_dir)
+        self.remove_path(self._install_dir)
 
         # Setup this temp directory
-        self._target_dir = str(target_dir)
-        if not os.path.exists(self._target_dir):
-            os.makedirs(self._target_dir)
-        # sys.path.insert(0, self._target_dir)
+        self._install_dir = str(install_dir)
+        if not os.path.exists(self._install_dir):
+            os.makedirs(self._install_dir)
+        # sys.path.insert(0, self._install_dir)
         return self
 
     @staticmethod
@@ -173,9 +177,9 @@ class VersionImporter(object):
 
     def iter_available_modules(self):
         """Iterate through importable packages."""
-        for item in os.listdir(self.import_dir):
+        for item in os.listdir(self.download_dir):
             try:
-                path = os.path.join(self.import_dir, item)
+                path = os.path.join(self.download_dir, item)
                 ext = os.path.splitext(item)[-1].lower()
                 if (ext in self.python_extensions or
                         (ext == '' and is_python_package(path)) or
@@ -209,52 +213,94 @@ class VersionImporter(object):
         else:
             return results
 
-    def delete_module(self, name, version=None):
-        """Delete the given module from the target_dir.
+    def get_downloaded_versions(self, package, download_dir=None):
+        """Return a series of package versions that have already been downloaded.
 
         Args:
-            name (str/ModuleType): String module name or module import_name. This may also be the module object
-                that was imported.
-            version (str)[None]: Version numbers (Example: 1.0.4).
+            package (str): Name of the package/library you want to ge the versions for (Example: "requests").
+            download_dir (str)['.']: Download directory.
+
+        Returns:
+            data (OrderedDict): Dictionary of {(package name, version): filename}
+        """
+        download_dir = download_dir or self.download_dir
+
+        d = OrderedDict()
+
+        package_dir = os.path.join(download_dir, package + '*.*')
+        for filename in glob.iglob(package_dir):
+            name, version = get_name_version(filename)
+            if (name, version) not in d or filename.endswith('.whl'):
+                d[(name, version)] = os.path.abspath(filename)
+
+        return d
+
+    def delete(self, project, version=None):
+        """Delete all of the downloaded and installed files for the given project and version.
+
+        Args:
+            project (str): Project name.
+            version (str)[None]: Project version to delete.
+        """
+        self.delete_downloaded(project, version)
+        self.delete_installed(project, version)
+
+    def delete_downloaded(self, name, version=None, download_dir=None):
+        """Delete all of the downloaded files for the given project and version.
+
+        Args:
+            name (str/module): Package name.
+            version (str)[None]: Project version to delete.
+            download_dir (str)['.']: Download directory.
         """
         if not isinstance(name, str):
-            # Get the proper name and version from the module
-            module = name
             try:
-                version = module.__import_version__
-                name = module.__module__  # Name of the module
+                name = name.__module__
             except (AttributeError, Exception):
-                try:
-                    # Hack where we save the import version
-                    version = module.__version__
-                    name = module.__module__  # Name of the module
-                except (AttributeError, Exception):
-                    # Manually find the module name and version ...
-                    name = None
-                    for n, vs in self.modules.items():
-                        for v, m in vs.items():
-                            if m == module:
-                                name = n
-                                version = v
-                                break
-        else:
-            # Get the proper name and version
-            name, version, import_name, path = self.find_module(name, version)
+                name = str(name)
 
-        #  Check if the name was valid
-        if name is None:
-            return name, version
+        # Delete all of the downloaded files
+        for filename in self.get_downloaded_versions(name, download_dir=download_dir).values():
+            try:
+                if version is None or get_name_version(filename)[1] == version:
+                    os.remove(filename)
+            except (OSError, Exception):
+                pass
 
+    def delete_installed(self, name, version=None):
+        """Delete all of the installed files for the given project and version.
+
+        Args:
+            name (str/module): Package name.
+            version (str)[None]: Project version to delete.
+        """
+        if not isinstance(name, str):
+            try:
+                name = name.__module__
+            except (AttributeError, Exception):
+                name = str(name)
+
+        # Get the installed directory
+        directory = self.make_import_path(name, version or '')
+        if version is None:
+            directory = os.path.dirname(directory)
+
+        # Remove the library from the installed modules
         try:
-            del self.modules[name][version]
-        except:
+            if version is None:
+                del self.modules[name]
+            else:
+                del self.modules[name][version]
+        except (KeyError, ValueError, TypeError, Exception):
             pass
+
+        # Always delete installed
         try:
-            import_path = self.make_import_path(name, version)
-            shutil.rmtree(import_path)
-        except:
+            shutil.rmtree(directory, ignore_errors=True)
+        except (OSError, Exception):
             pass
-        return name, version
+
+    delete_module = delete_installed
 
     def error(self, path, err):
         """Handle an import error."""
@@ -283,8 +329,8 @@ class VersionImporter(object):
         if not version:
             version = '0.0.0'
 
-        # Check if target_dir
-        if self.target_dir is None:
+        # Check if install_dir
+        if self.install_dir is None:
             self.init()
 
         # Check if import name is available
@@ -416,7 +462,7 @@ class VersionImporter(object):
     def cleanup(self):
         """Properly close the tempfile directory."""
         try:
-            self.remove_path(self.target_dir, delete_path=True)
+            self.remove_path(self.install_dir, delete_path=True)
         except:
             pass
         return self

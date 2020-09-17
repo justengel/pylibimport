@@ -3,9 +3,9 @@ import os
 
 def make_importer():
     from pylibimport.lib_import import VersionImporter
-    v = VersionImporter(import_dir='./sub/import_dir/',  # Where to find available imports
-                        target_dir='./sub/target_dir',   # Where to save imports/installs to
-                        install_dependencies=False,      # .whl files install dependencies in target_dir?
+    v = VersionImporter(download_dir='./sub/import_dir/',  # Where to find available imports
+                        install_dir='./sub/target_dir',  # Where to save imports/installs to
+                        install_dependencies=False,  # .whl files install dependencies in target_dir?
                         reset_modules=True)              # Reset sys.modules after import removing dependencies?
     v.cleanup()  # Delete the target_dir (Needed for testing)
     v.init()
@@ -70,7 +70,7 @@ def test_import_module():
     assert custom_0_0_1.run_custom() != 'hello'
 
 
-def test_delete_module():
+def test_delete_installed():
     import shutil
     v = make_importer()
 
@@ -82,7 +82,7 @@ def test_delete_module():
     module = v.import_module('dynamicmethod-1.0.2.zip')
     assert module is not None
     assert os.path.exists(module_path)
-    v.delete_module(module)
+    v.delete_installed(module)
     assert not os.path.exists(module_path)
 
     # Delete as name
@@ -90,22 +90,23 @@ def test_delete_module():
     module = v.import_module('dynamicmethod')  # Will be latest version in import_dir
     assert module is not None
     assert os.path.exists(v.make_import_path('dynamicmethod', '1.0.4'))
-    v.delete_module('dynamicmethod')  # Will delete the latest version.
+    v.delete_installed('dynamicmethod')  # Will delete the latest version.
     assert not os.path.exists(v.make_import_path('dynamicmethod', '1.0.4'))
 
     # Delete as name version
     module = v.import_module('dynamicmethod', '1.0.2')  # Will be latest version in import_dir
     assert module is not None
     assert os.path.exists(module_path)
-    v.delete_module('dynamicmethod', '1.0.2')  # Will delete the latest version.
+    v.delete_installed('dynamicmethod', '1.0.2')  # Will delete the latest version.
     assert not os.path.exists(module_path)
 
-    # Delete as import name
-    module = v.import_module('dynamicmethod_1_0_2')
-    assert module is not None
-    assert os.path.exists(module_path)
-    v.delete_module('dynamicmethod_1_0_2')
-    assert not os.path.exists(module_path)
+    # THIS IS NOT AVAILABLE ANYMORE!
+    # # Delete as import name
+    # module = v.import_module('dynamicmethod_1_0_2')
+    # assert module is not None
+    # assert os.path.exists(module_path)
+    # v.delete_installed('dynamicmethod_1_0_2')
+    # assert not os.path.exists(module_path)
 
 
 def test_import_zip():
@@ -158,7 +159,7 @@ if __name__ == '__main__':
     test_find_module()
     test_import_path()
     test_import_module()
-    test_delete_module()
+    test_delete_installed()
 
     test_import_zip()
     test_multi_import_zip()

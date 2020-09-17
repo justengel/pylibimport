@@ -3,14 +3,14 @@
 def run_simple():
     import pylibimport
 
-    importer = pylibimport.VersionImporter(target_dir='./sub/target_dir')
+    importer = pylibimport.VersionImporter(install_dir='./sub/target_dir')
 
     custom = importer.import_module('./sub/custom.py')
     print(custom.run_custom())
     # 'hello custom1'
 
     # Remove the saved module from the target_dir
-    importer.delete_module(custom)
+    importer.delete_installed(custom)
 
     # Give a version number to the module
     custom = importer.import_module('./sub/custom.py', '1.0.0')
