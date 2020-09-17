@@ -154,6 +154,15 @@ def test_whl_install():
     assert module.__version__ == '1.0.4'
 
 
+def test_download():
+    v = make_importer()
+    v.download('continuous_threading', '1.2.1')
+    _, _, _, filename = v.find_module('continuous_threading', '1.2.1')
+    assert os.path.exists(filename)
+    v.delete_downloaded('continuous_threading', '1.2.1')  # or v.delete('continuous_threading', '1.2.1')
+    assert not os.path.exists(filename)
+
+
 if __name__ == '__main__':
     test_available_modules()
     test_find_module()
@@ -164,5 +173,7 @@ if __name__ == '__main__':
     test_import_zip()
     test_multi_import_zip()
     test_whl_install()
+
+    test_download()
 
     print('All tests finished successfully!')

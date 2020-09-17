@@ -13,6 +13,7 @@ from packaging.version import parse as parse_version
 import multiprocessing as mp  # Multiprocessing will work in PyInstaller executable
 
 from .utils import make_import_name, get_name_version, is_python_package
+from .get_versions import HttpListVersions
 
 
 if getattr(sys, 'frozen', False):
@@ -43,13 +44,14 @@ class VersionImporter(object):
 
     DEFAULT_PYTHON_EXTENSIONS = ['.py', '.pyc', '.pyd']
 
-    def __init__(self, download_dir=None, install_dir=None, python_extensions=None,
-                 install_dependencies=False, reset_modules=True, **kwargs):
+    def __init__(self, download_dir=None, install_dir=None, index_url='https://pypi.org/simple/',
+                 python_extensions=None, install_dependencies=False, reset_modules=True, **kwargs):
         """Initialize the library
 
         Args:
             download_dir (str)[None]: Name of the import directory.
             install_dir (str)[None]: Name of the directory to install the packages to.
+            index_url (str)['https://pypi.org/simple/']: Index url for downloading files.
             python_extensions (list)[None]: Available python extensions to try to import normally.
             install_dependencies (bool)[False]: If True .whl files will install dependencies into the install_dir.
             reset_modules (bool)[True]: Reset the state of sys.modules after importing.
@@ -61,6 +63,7 @@ class VersionImporter(object):
 
         self.download_dir = download_dir
         self._install_dir = None
+        self.index_url = index_url
         self.python_extensions = python_extensions
         self.install_dependencies = install_dependencies
         self.reset_modules = reset_modules
@@ -301,6 +304,50 @@ class VersionImporter(object):
             pass
 
     delete_module = delete_installed
+
+    def install(self, package, version=None):
+        """Install a downloaded package.
+
+        Args:
+            package (str): Name of the package/library you want to ge the versions for (Example: "requests").
+            version (str)[None]: Version number to find and download.
+        """
+        try:
+            main_module = self.import_module(package, version)
+            if main_module is None:
+                self.delete_installed(package, version)
+                return False
+            return True
+        except (ImportError, Exception):
+            self.delete_installed(package, version)
+            return False
+
+    def download(self, package, version=None, download_dir=None, index_url=None, extensions='.whl',
+                 min_version=None, exclude=None):
+        """Download a package version to the download directory and return the file path that was saved.
+
+        Args:
+            package (str): Name of the package/library you want to ge the versions for (Example: "requests").
+            version (str)[None]: Version number to find and download.
+            download_dir (str)['.']: Download directory.
+            index_url (str) ['https://pypi.org/simple/']: Simple url to get the package and it's versions from.
+            extensions (list/str) [None]: List of allowed extensions (Example: [".whl", ".tar.gz"]).
+            min_version (str)[None]: Minimum version to allow.
+            exclude (list)[None]: List of versions that are excluded.
+
+        Returns:
+            filename (str)[None]: Filename of the downloaded package.
+        """
+        try:
+            index_url = index_url or self.index_url
+            download_dir = download_dir or self.download_dir
+            if not os.path.exists(download_dir):
+                os.makedirs(download_dir)
+            return HttpListVersions.download(package, version=version, download_dir=download_dir, index_url=index_url,
+                                             extensions=extensions, min_version=min_version, exclude=exclude)
+        except Exception as err:
+            self.error(None, err)
+            return None
 
     def error(self, path, err):
         """Handle an import error."""
