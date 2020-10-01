@@ -350,7 +350,7 @@ class VersionImporter(object):
             return HttpListVersions.download(package, version=version, download_dir=download_dir, index_url=index_url,
                                              extensions=extensions, min_version=min_version, exclude=exclude)
         except Exception as err:
-            self.error(None, err)
+            self.error(err)
             return None
 
     def get_versions(self, package, index_url=None, min_version=None, exclude=None):
@@ -369,12 +369,12 @@ class VersionImporter(object):
             index_url = index_url or self.index_url
             return HttpListVersions.get_versions(package, index_url=index_url, min_version=min_version, exclude=exclude)
         except Exception as err:
-            self.error(None, err)
+            self.error(err)
             return {}
 
-    def error(self, path, err):
+    def error(self, error):
         """Handle an import error."""
-        raise err
+        raise error
 
     def import_module(self, name, version=None, import_chain=None):
         """Import the given module or package."""
@@ -392,7 +392,7 @@ class VersionImporter(object):
                     version = v
             else:
                 # Invalid path/name given!
-                self.error(orig_name, ModuleNotFoundError(orig_name))
+                self.error(ModuleNotFoundError(orig_name))
                 return
 
         # Set version
@@ -449,12 +449,12 @@ class VersionImporter(object):
                 # Save the import version
                 try:
                     module.__import_version__ = version
-                except:
+                except (AttributeError, Exception):
                     pass
 
                 return module
             except (ImportError, Exception) as err:
-                self.error(path, err)
+                self.error(err)
                 return
 
     def py_import(self, name, version, path, import_chain=None):
@@ -524,7 +524,7 @@ class VersionImporter(object):
                     shutil.rmtree(import_path)
                 except:
                     pass
-                self.error(path, err)
+                self.error(err)
                 return
 
         return self._import_module(name, version, path, import_chain)
