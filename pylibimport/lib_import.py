@@ -39,12 +39,15 @@ __all__ = ['VersionImporter']
 class VersionImporter(object):
     """Import modules that have the same name, but different versions."""
 
-    PYTHON_VERSION = "{}.{}.{}-{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro,
-                                          platform.architecture()[0])
+    RUNNING_PYTHON_VERSION = "{}.{}.{}-{}"\
+        .format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro, platform.architecture()[0])
 
     DEFAULT_PYTHON_EXTENSIONS = ['.py', '.pyc', '.pyd']
 
-    def __init__(self, download_dir=None, install_dir=None, index_url='https://pypi.org/simple/',
+    get_name_version = staticmethod(get_name_version)
+    make_import_name = staticmethod(make_import_name)
+
+    def __init__(self, download_dir=None, install_dir=None, index_url='https://pypi.org/simple/', python_version=None,
                  python_extensions=None, install_dependencies=False, reset_modules=True, **kwargs):
         """Initialize the library
 
@@ -52,15 +55,19 @@ class VersionImporter(object):
             download_dir (str)[None]: Name of the import directory.
             install_dir (str)[None]: Name of the directory to install the packages to.
             index_url (str)['https://pypi.org/simple/']: Index url for downloading files.
+            python_version (str)[None]: Python version indicator used for the installation path (import_path).
             python_extensions (list)[None]: Available python extensions to try to import normally.
             install_dependencies (bool)[False]: If True .whl files will install dependencies into the install_dir.
             reset_modules (bool)[True]: Reset the state of sys.modules after importing.
                 Dependencies will not be loaded into sys.modules.
             **kwargs (dict): Unused given named arguments.
         """
+        if python_version is None:
+            python_version = self.RUNNING_PYTHON_VERSION
         if python_extensions is None:
             python_extensions = self.DEFAULT_PYTHON_EXTENSIONS
 
+        self.python_version = python_version
         self.download_dir = download_dir
         self._install_dir = None
         self.index_url = index_url
@@ -81,8 +88,23 @@ class VersionImporter(object):
     def install_dir(self, install_dir):
         self.init(install_dir)
 
-    def make_import_path(self, libname, libversion):
-        return os.path.join(self.install_dir, self.PYTHON_VERSION, libname, libversion)
+    def make_import_path(self, libname='', libversion='', install_dir=None, python_version=None):
+        """Return the import path that uses the install directory.
+
+        Args:
+            libname (str)['']: name of the package you want to import
+            libversion (str)['']: Version number (1.2.3) for the package that you want to import
+            install_dir (str)[None]: Installation directory.
+            python_version (str)[None]: Python version to check installs for.
+                This is found with sys.version info and platform.architecture.
+                "{}.{}.{}-{}".format(version_info.major, version_info.minor, version_info.micro, architecture()[0])
+                3.6.8-64bit
+        """
+        if install_dir is None:
+            install_dir = self.install_dir
+        if python_version is None:
+            python_version = self.python_version
+        return os.path.join(install_dir, python_version, libname, libversion)
 
     def init(self, install_dir=None):
         """Initialize this importer.
@@ -178,65 +200,137 @@ class VersionImporter(object):
         sys.path = paths
         sys.path_importer_cache = path_cache
 
-    def iter_available_modules(self):
-        """Iterate through importable packages."""
-        for item in os.listdir(self.download_dir):
-            try:
-                path = os.path.join(self.download_dir, item)
-                ext = os.path.splitext(item)[-1].lower()
-                if (ext in self.python_extensions or
-                        (ext == '' and is_python_package(path)) or
-                        (ext == '.zip' or tarfile.is_tarfile(path) or ext == '.whl')):
-
-                    name, version = get_name_version(path)
-                    import_name = make_import_name(name, version)
-                    yield name, version, import_name, path
-
-            except (AttributeError, ValueError, TypeError, Exception):
-                pass
-
-    def available_modules(self):
-        """Return a list of importable packages."""
-        return [import_name for n, v, import_name, path in self.iter_available_modules()]
-
-    def find_module(self, module_name, version=None):
-        """Return the import dir module path for the given module name, import_name, or path."""
-        # Search by import name
-        results = (None, None, None, None)
-        for n, v, i, p in self.iter_available_modules():
-            if i == module_name or p.endswith(module_name) or (n == module_name and v == version):
-                return n, v, i, p
-            elif n == module_name and (results[1] is None or parse_version(v) > parse_version(results[1])):
-                # Make results this item but keep looking for newer versions.
-                results = (n, v, i, p)
-
-        # Check if requested version was found
-        if version is not None and results[1] != version:
-            return None, None, None, None  # Cannot find the correct version!
-        else:
-            return results
-
-    def get_downloaded_versions(self, package, download_dir=None):
-        """Return a series of package versions that have already been downloaded.
+    def iter_installed_versions(self, package=None, install_dir=None, python_version=None):
+        """Iterate through installed versions of a packge yielding the available options.
 
         Args:
-            package (str): Name of the package/library you want to ge the versions for (Example: "requests").
-            download_dir (str)['.']: Download directory.
+            package (str)[None]: Name of the package/library you want to ge the versions for (Example: "requests").
+            install_dir (str)[None]: Installation directory.
+            python_version (str)[None]: Python version to check installs for.
+                This is found with sys.version info and platform.architecture.
+                "{}.{}.{}-{}".format(version_info.major, version_info.minor, version_info.micro, architecture()[0])
+                3.6.8-64bit
+
+        Returns:
+            data (OrderedDict): Dictionary of {(package name, version): filename}
+        """
+        install_dir = install_dir or self.install_dir
+        python_version = python_version or self.python_version
+        install_path = self.make_import_path('', '', install_dir=install_dir, python_version=python_version)
+
+        exceptions = (AttributeError, ValueError, TypeError, FileNotFoundError, Exception)
+        with contextlib.suppress(*exceptions):
+            for name in os.listdir(install_path):
+                package_path = os.path.join(install_path, name)
+                if (package is None or package == name) and os.path.isdir(package_path):
+                    for version in os.listdir(package_path):
+                        with contextlib.suppress(*exceptions):
+                            # Check if the installed directory has contents and yield the package info
+                            path = os.path.abspath(os.path.join(package_path, version))
+                            if len(os.listdir(path)) > 0:
+                                import_name = self.make_import_name(name, version)
+                                yield name, version, import_name, path
+
+    def get_installed_versions(self, package=None, install_dir=None, python_version=None):
+        """Return a series of package versions that have been installed for this python version.
+
+        Args:
+            package (str)[None]: Name of the package/library you want to ge the versions for (Example: "requests").
+            install_dir (str)[None]: Installation directory.
+            python_version (str)[None]: Python version to check installs for.
+                This is found with sys.version info and platform.architecture.
+                "{}.{}.{}-{}".format(version_info.major, version_info.minor, version_info.micro, architecture()[0])
+                3.6.8-64bit
+
+        Returns:
+            data (OrderedDict): Dictionary of {(package name, version): filepath}
+        """
+        it = self.iter_installed_versions(package, install_dir, python_version)
+        return OrderedDict([((n, v), p) for (n, v, i, p) in it])
+
+    def iter_downloaded_versions(self, package=None, download_dir=None):
+        """Iterate through installed versions of a packge yielding the available options.
+
+        Args:
+            package (str)[None]: Name of the package/library you want to ge the versions for (Example: "requests").
+            download_dir (str)[None]: Download directory.
 
         Returns:
             data (OrderedDict): Dictionary of {(package name, version): filename}
         """
         download_dir = download_dir or self.download_dir
 
-        d = OrderedDict()
+        exceptions = (AttributeError, ValueError, TypeError, FileNotFoundError, Exception)
+        with contextlib.suppress(*exceptions):
+            for filename in os.listdir(download_dir):
+                with contextlib.suppress(*exceptions):
+                    path = os.path.join(download_dir, filename)
+                    ext = os.path.splitext(filename)[-1].lower()
+                    if (ext in self.python_extensions or
+                            (ext == '' and is_python_package(path)) or
+                            (ext == '.zip' or tarfile.is_tarfile(path) or ext == '.whl')):
+                        name, version = self.get_name_version(path)
+                        import_name = self.make_import_name(name, version)
+                        if package is None or package == name or import_name == package or filename.endswith(package):
+                            yield name, version, import_name, path
 
-        package_dir = os.path.join(download_dir, package + '*.*')
-        for filename in glob.iglob(package_dir):
-            name, version = get_name_version(filename)
-            if (name, version) not in d:
-                d[(name, version)] = os.path.abspath(filename)
+    def get_downloaded_versions(self, package=None, download_dir=None):
+        """Return a series of package versions that have already been downloaded.
 
-        return d
+        Args:
+            package (str)[None]: Name of the package/library you want to ge the versions for (Example: "requests").
+            download_dir (str)[None]: Download directory.
+
+        Returns:
+            data (OrderedDict): Dictionary of {(package name, version): filename}
+        """
+        it = self.iter_downloaded_versions(package, download_dir)
+        return OrderedDict([((n, v), p) for (n, v, i, p) in it])
+
+    def available_modules(self, use_downloads=True, directory=None):
+        """Return a list of modules and their versions
+
+        Args:
+            use_downloads (bool)[True]: If True get the available versions from downloads.
+                If False use the installed versions.
+            directory (str)[None]: Directory to check. If None the default directories will be used.
+
+        Returns:
+            modules (list): List of [tuple(name, version, import_name, filepath)]
+        """
+        if use_downloads:
+            versions = self.iter_downloaded_versions(download_dir=directory)
+        else:
+            versions = self.iter_installed_versions(install_dir=directory)
+
+        return list(versions)
+
+    def find_module(self, module_name, version=None, use_downloads=True):
+        """Return the import dir module path for the given module name, import_name, or path.
+
+        Args:
+            module_name (str)[None]: Name of the package or module ("module" or "module.py")
+            version (str)[None]: If given find a specific version.
+            use_downloads (bool)[True]: If True use the download_dir. If False use the install_dir.
+        """
+        if use_downloads:
+            versions = self.iter_downloaded_versions(module_name)
+        else:
+            versions = self.iter_installed_versions(module_name)
+
+        results = (None, None, None, None)
+        for (n, v, import_name, path) in versions:
+            if import_name == module_name or path.endswith(module_name) or (n == module_name and v == version):
+                return n, v, import_name, path
+            elif n == module_name and (results[1] is None or parse_version(v) > parse_version(results[1])):
+                # Make results this item but keep looking for newer versions.
+                results = (n, v, import_name, path)
+
+        # Check if requested version was found
+        if version is not None and results[1] != version:
+            return None, None, None, None  # Cannot find the correct version!
+        else:
+            return results
 
     def delete(self, project, version=None):
         """Delete all of the downloaded and installed files for the given project and version.
@@ -265,7 +359,7 @@ class VersionImporter(object):
         # Delete all of the downloaded files
         for filename in self.get_downloaded_versions(name, download_dir=download_dir).values():
             try:
-                if version is None or get_name_version(filename)[1] == version:
+                if version is None or self.get_name_version(filename)[1] == version:
                     os.remove(filename)
             except (OSError, Exception):
                 pass
@@ -309,7 +403,7 @@ class VersionImporter(object):
         """Return if the given URL/URI exists."""
         return uri_exists(index_url or self.index_url)
 
-    def install(self, package, version=None):
+    def install_downloaded(self, package, version=None):
         """Install a downloaded package.
 
         Args:
@@ -387,7 +481,7 @@ class VersionImporter(object):
             version = orig_version
             if os.path.exists(orig_name):
                 path = orig_name
-                name, v = get_name_version(path)
+                name, v = self.get_name_version(path)
                 if version is None:
                     version = v
             else:
@@ -418,7 +512,11 @@ class VersionImporter(object):
             return self.whl_install(name, version, path, import_chain)
 
     def _import_module(self, name, version, path, import_chain=None):
-        """Import the given module name from the given import path."""
+        """Import the given module name from the given import path.
+
+        Args:
+            name
+        """
         if import_chain is None:
             import_chain = name
         if import_chain in self.modules:
@@ -435,7 +533,7 @@ class VersionImporter(object):
                     module = importlib.import_module(import_chain)  # module = __import__(name)
 
                 # Save in sys.modules with version
-                import_name = make_import_name(import_chain, version)
+                import_name = self.make_import_name(import_chain, version)
                 if not self.reset_modules:
                     self.rename_module(name, import_name)
                 else:
@@ -497,8 +595,23 @@ class VersionImporter(object):
 
         return self._import_module(name, version, path, import_chain)
 
-    def whl_install(self, name, version, path, import_chain=None):
-        """Import whl or zip files."""
+    def whl_install(self, name, version, path, import_chain=None, extra_install_args=None):
+        """Import whl or zip files and return the installed module.
+
+        Args:
+            name (str): Package name to install. Used to find the install path.
+            version (str): Package version to install. Used to find the install path.
+            path (str): Filepath to the package that will be installed.
+            import_chain (str)[None]: Chain of packages to import ('module1.submodule.submodule2'). If none name is used
+            extra_install_args (list/str): List of extra parameters to pass into the pip install command.
+                Note: the '--target' argument is already being used.
+
+        Returns:
+            module (ModuleType)[None]: Module object that was imported or None if failed.
+        """
+        if isinstance(extra_install_args, str):
+            extra_install_args = [extra_install_args]
+
         # Get the import path
         import_path = self.make_import_path(name, version)
 
@@ -510,6 +623,11 @@ class VersionImporter(object):
         with self.original_system(import_path, reset_modules=self.reset_modules):
             try:
                 args = ['install', '--target', import_path, path]
+                if isinstance(extra_install_args, list):
+                    if '--target' not in extra_install_args:
+                        args = args[0:1] + extra_install_args + args[1:]
+                    else:
+                        args = ['install'] + extra_install_args + [path]
                 if not self.install_dependencies:
                     args.insert(1, '--no-deps')
 

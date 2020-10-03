@@ -16,9 +16,10 @@ def make_importer():
 def test_available_modules():
     v = make_importer()
 
-    assert len(tuple(v.iter_available_modules())) > 0
-    assert len(next(v.iter_available_modules())) > 0
-    assert isinstance(v.available_modules()[0], str)
+    assert len(tuple(v.iter_downloaded_versions())) > 0
+    assert len(next(v.iter_downloaded_versions())) > 0
+    assert len(tuple(v.iter_installed_versions())) == 0
+    assert isinstance(v.available_modules()[0], tuple)
 
 
 def test_find_module():
