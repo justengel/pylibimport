@@ -328,6 +328,8 @@ class VersionImporter(object):
 
         # Check if requested version was found
         if version is not None and results[1] != version:
+            if use_downloads:
+                return self.find_module(module_name, version, use_downloads=False)
             return None, None, None, None  # Cannot find the correct version!
         else:
             return results
