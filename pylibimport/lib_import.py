@@ -597,6 +597,23 @@ class VersionImporter(object):
 
         return self._import_module(name, version, path, import_chain)
 
+    @staticmethod
+    def pip(*args):
+        """Run a pip command.
+
+        https://pip.pypa.io/en/stable/reference/
+        """
+        try:
+            # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
+            proc = mp.Process(target=pip_main, args=(list(args),))  #, name='pip_install')
+            proc.start()
+            proc.join()
+            if proc.exitcode != 0:
+                raise ImportError('Could not import {}'.format(name))
+            return proc.exitcode, None
+        except (ValueError, TypeError, OSError, Exception) as err:
+            return 1, err
+
     def install(self, name, version, path, import_chain=None, extra_install_args=None):
         """Import whl or zip files and return the installed module.
 
@@ -611,7 +628,9 @@ class VersionImporter(object):
         Returns:
             module (ModuleType)[None]: Module object that was imported or None if failed.
         """
-        if isinstance(extra_install_args, str):
+        if not extra_install_args:
+            extra_install_args = []
+        elif isinstance(extra_install_args, str):
             extra_install_args = [extra_install_args]
 
         # Get the import path
@@ -623,29 +642,19 @@ class VersionImporter(object):
         except:
             pass
         with self.original_system(import_path, reset_modules=self.reset_modules):
-            try:
-                args = ['install', '--target', import_path, path]
-                if isinstance(extra_install_args, list):
-                    if '--target' not in extra_install_args:
-                        args = args[0:1] + extra_install_args + args[1:]
-                    else:
-                        args = ['install'] + extra_install_args + [path]
-                if not self.install_dependencies:
-                    args.insert(1, '--no-deps')
+            if not self.install_dependencies:
+                args = ['install', '--no-deps', '--target', import_path] + extra_install_args + [path]
+            else:
+                args = ['install', '--target', import_path] + extra_install_args + [path]
 
-                # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
-                proc = mp.Process(target=pip_main, args=(args,))  #, name='pip_install')
-                proc.start()
-                proc.join()
-                if proc.exitcode != 0:
-                    raise ImportError('Could not import {}'.format(name))
-            except (ImportError, Exception) as err:
+            exitcode, error = self.pip(*args)
+            if error:
                 try:
                     shutil.rmtree(import_path)
-                except:
+                except (OSError, Exception):
                     pass
-                self.error(err)
-                return
+                self.error(error)
+                return None
 
         return self._import_module(name, version, path, import_chain)
 
