@@ -8,7 +8,7 @@ __all__ = ['EXTENSIONS', 'make_import_name', 'get_name_version', 'is_python_pack
 EXTENSIONS = ['.whl', '.tar.gz', '.tar', '.zip', '.dist-info']
 
 WHEEL_INFO_RE = re.compile(
-        r"""^(?P<namever>(?P<name>.+?)-(?P<version>(\d*)(.(a|b|rc)?\d*)?(.(post|dev)?\d*)?))(-(?P<build>\d.*?))?
+        r"""^(?P<namever>(?P<name>.+?)-(?P<version>(\d*)(\.(a|b|rc)?\d+)?(\.(post|dev)?\d+)?))(-(?P<build>\d.*?))?
          -(?P<pyver>[a-z].+?)-(?P<abi>.+?)-(?P<plat>.+?)(\.whl|\.dist-info|\.zip|\.tar\.gz|\.tar)?$""",
         re.VERBOSE).match
 
