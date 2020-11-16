@@ -68,7 +68,7 @@ class VersionImporter(object):
             python_extensions = self.DEFAULT_PYTHON_EXTENSIONS
 
         self.python_version = python_version
-        self.download_dir = download_dir
+        self._download_dir = None
         self._install_dir = None
         self.index_url = index_url
         self.python_extensions = python_extensions
@@ -76,35 +76,44 @@ class VersionImporter(object):
         self.reset_modules = reset_modules
         self.modules = {}
 
+        if download_dir is not None:
+            self.set_download_dir(download_dir)
         if install_dir is not None:
             self.init(install_dir)
 
-    @property
-    def install_dir(self):
-        """Return the name of the target save directory."""
-        return self._install_dir
+    def get_download_dir(self):
+        """Return the download directory."""
+        return self._download_dir
 
-    @install_dir.setter
-    def install_dir(self, install_dir):
-        self.init(install_dir)
-
-    def make_import_path(self, libname='', libversion='', install_dir=None, python_version=None):
-        """Return the import path that uses the install directory.
+    def set_download_dir(self, value):
+        """Set the download directory.
 
         Args:
-            libname (str)['']: name of the package you want to import
-            libversion (str)['']: Version number (1.2.3) for the package that you want to import
-            install_dir (str)[None]: Installation directory.
-            python_version (str)[None]: Python version to check installs for.
-                This is found with sys.version info and platform.architecture.
-                "{}.{}.{}-{}".format(version_info.major, version_info.minor, version_info.micro, architecture()[0])
-                3.6.8-64bit
+            value (str)[None]: Directory to download .whl packages to.
         """
-        if install_dir is None:
-            install_dir = self.install_dir
-        if python_version is None:
-            python_version = self.python_version
-        return os.path.join(install_dir, python_version, libname, libversion)
+        if value is not None:
+            value = os.path.abspath(str(value))
+        self._download_dir = value
+
+    download_dir = property(get_download_dir, set_download_dir)
+
+    def get_install_dir(self):
+        """Return the installation directory."""
+        return self._install_dir
+
+    def set_install_dir(self, value):
+        """Set the installation directory.
+
+        See Also:
+            VersionImporter.make_import_path
+
+        Args:
+            value (str/None): Directory to install packages to.
+                This directory will also use the Python version, library name, and library version to install.
+        """
+        self.init(value)
+
+    install_dir = property(get_install_dir, set_install_dir)
 
     def init(self, install_dir=None):
         """Initialize this importer.
@@ -123,11 +132,29 @@ class VersionImporter(object):
         self.remove_path(self._install_dir)
 
         # Setup this temp directory
-        self._install_dir = str(install_dir)
+        self._install_dir = os.path.abspath(str(install_dir))
         if not os.path.exists(self._install_dir):
             os.makedirs(self._install_dir)
         # sys.path.insert(0, self._install_dir)
         return self
+
+    def make_import_path(self, libname='', libversion='', install_dir=None, python_version=None):
+        """Return the import path that uses the install directory.
+
+        Args:
+            libname (str)['']: name of the package you want to import
+            libversion (str)['']: Version number (1.2.3) for the package that you want to import
+            install_dir (str)[None]: Installation directory.
+            python_version (str)[None]: Python version to check installs for.
+                This is found with sys.version info and platform.architecture.
+                "{}.{}.{}-{}".format(version_info.major, version_info.minor, version_info.micro, architecture()[0])
+                3.6.8-64bit
+        """
+        if install_dir is None:
+            install_dir = self.install_dir
+        if python_version is None:
+            python_version = self.python_version
+        return os.path.abspath(os.path.join(install_dir, python_version, libname, libversion))
 
     @staticmethod
     def remove_path(path, delete_path=False):
