@@ -33,7 +33,7 @@ except (ImportError, AttributeError, Exception):
     from pip import main as pip_main
 
 
-__all__ = ['VersionImporter']
+__all__ = ['VersionImporter', 'pip_main']
 
 
 class VersionImporter(object):
@@ -609,7 +609,7 @@ class VersionImporter(object):
             proc.start()
             proc.join()
             if proc.exitcode != 0:
-                raise ImportError('Could not import {}'.format(name))
+                raise ValueError('Could not run pip with arguments {}'.format(args))
             return proc.exitcode, None
         except (ValueError, TypeError, OSError, Exception) as err:
             return 1, err
