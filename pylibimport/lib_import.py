@@ -10,10 +10,10 @@ import importlib
 import platform
 from collections import OrderedDict
 from packaging.version import parse as parse_version
-import multiprocessing as mp  # Multiprocessing will work in PyInstaller executable
 
 from .utils import make_import_name, get_name_version, is_python_package
 from .get_versions import HttpListVersions, uri_exists
+from .pip_utils import default_wait_func, pip_main, pip_bin, pip_proc
 
 
 if getattr(sys, 'frozen', False):
@@ -27,13 +27,12 @@ if getattr(sys, 'frozen', False):
     if not getattr(sys, 'prefix', None):
         sys.prefix = sys.executable
 
-try:
-    from pip._internal import main as pip_main
-except (ImportError, AttributeError, Exception):
-    from pip import main as pip_main
+
+__all__ = ['InstallError', 'VersionImporter']
 
 
-__all__ = ['VersionImporter', 'pip_main']
+class InstallError(Exception):
+    pass
 
 
 class VersionImporter(object):
@@ -44,6 +43,8 @@ class VersionImporter(object):
 
     DEFAULT_PYTHON_EXTENSIONS = ['.py', '.pyc', '.pyd']
 
+    pip = staticmethod(pip_main)
+    wait_func = staticmethod(default_wait_func)
     get_name_version = staticmethod(get_name_version)
     make_import_name = staticmethod(make_import_name)
 
@@ -624,23 +625,6 @@ class VersionImporter(object):
 
         return self._import_module(name, version, path, import_chain)
 
-    @staticmethod
-    def pip(*args):
-        """Run a pip command.
-
-        https://pip.pypa.io/en/stable/reference/
-        """
-        try:
-            # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
-            proc = mp.Process(target=pip_main, args=(list(args),))  #, name='pip_install')
-            proc.start()
-            proc.join()
-            if proc.exitcode != 0:
-                raise ValueError('Could not run pip with arguments {}'.format(args))
-            return proc.exitcode, None
-        except (ValueError, TypeError, OSError, Exception) as err:
-            return 1, err
-
     def install(self, name, version, path, import_chain=None, extra_install_args=None):
         """Import whl or zip files and return the installed module.
 
@@ -669,18 +653,17 @@ class VersionImporter(object):
         except:
             pass
         with self.original_system(import_path, reset_modules=self.reset_modules):
+            args = ['install', '--target', import_path] + extra_install_args + [path]
             if not self.install_dependencies:
-                args = ['install', '--no-deps', '--target', import_path] + extra_install_args + [path]
-            else:
-                args = ['install', '--target', import_path] + extra_install_args + [path]
+                args.insert(1, '--no-deps')
 
-            exitcode, error = self.pip(*args)
-            if error:
+            exitcode = self.pip(*args, wait_func=self.wait_func)
+            if exitcode != 0:
                 try:
                     shutil.rmtree(import_path)
                 except (OSError, Exception):
                     pass
-                self.error(error)
+                self.error(InstallError('Could not install using pip with arguments {}'.format(args)))
                 return None
 
         return self._import_module(name, version, path, import_chain)

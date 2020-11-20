@@ -19,6 +19,70 @@ Import options:
   * Zip import - import .zip files or .tar.gz sdist files.
   * Wheel import - import .whl files. This really installs them to a target dir then imports it.
 
+    * This requires pip. See "Pip Options".
+
+
+Pip Options
+===========
+
+This library now provides multiple ways of using pip. The default method is by importing pip's main function and
+running it (pip_main). If you are using this in an executable `pip_bin` is recommended.
+
+
+pip_main
+~~~~~~~~
+The pip_main option simply uses the main function found in pip. This is the default for this library.
+Sometimes pip's main function will open a separate process which may cause problems with executables.
+
+.. code-block:: python
+
+    import pylibimport
+
+    pylibimport.VersionImporter.pip = pylibimport.pip_main
+
+
+pip_proc
+~~~~~~~~
+The pip_proc option uses LightProcess to create a separate process and run pip_main.
+
+.. code-block:: python
+
+    import pylibimport
+
+    pylibimport.VersionImporter.pip = pylibimport.pip_proc
+
+
+pip_bin
+~~~~~~~
+I found running the binary is the most reliable way for installing packages. This is also the best way if you are
+bundling your code into an executable using PyInstaller (not as a onefile executable). The pylibimport library uses this
+pip option by default. If using PyInstaller see pyinstaller_hooks/hook-pylibimport.py.
+
+This can be changed with the following code
+
+.. code-block:: python
+
+    import pylibimport
+
+    pylibimport.VersionImporter.pip = pylibimport.pip_bin
+
+
+This can be extended to run the subprocess in shell mode.
+
+.. code-block:: python
+
+    import pylibimport
+
+    def pip_shell(*args, **kwargs):
+        return pylibimport.pip_bin(*args, shell=True, **kwargs)
+
+    pylibimport.VersionImporter.pip = pip_shell
+
+
+You should be able to use this method in a PyInstaller executable as well.
+I believe in some cases pip opens a subprocess which can cause problems with multiprocessing executables.
+I found pip_bin to be the most reliable method.
+
 
 Example
 =======
