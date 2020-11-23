@@ -78,7 +78,7 @@ if __name__ == "__main__":
           install_requires=[
               'packaging>=20.3',
               'requests>=2.18.2',
-              'light_process>=0.0.1',
+              'light_process>=0.0.2',
               ],
           extras_require={
               },
