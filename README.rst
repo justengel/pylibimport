@@ -32,7 +32,8 @@ running it (pip_main). If you are using this in an executable `pip_bin` is recom
 pip_main
 ~~~~~~~~
 The pip_main option simply uses the main function found in pip. This is the default for this library.
-Sometimes pip's main function will open a separate process which may cause problems with executables.
+Sometimes pip's main function will open a separate process which may cause problems with executables. I believe pip
+opens a separate process when it is trying to install a directory with a setup.py file instead of a whl file.
 
 .. code-block:: python
 
@@ -54,11 +55,9 @@ The pip_proc option uses LightProcess to create a separate process and run pip_m
 
 pip_bin
 ~~~~~~~
-I found running the binary is the most reliable way for installing packages. This is also the best way if you are
-bundling your code into an executable using PyInstaller (not as a onefile executable). The pylibimport library uses this
-pip option by default. If using PyInstaller see pyinstaller_hooks/hook-pylibimport.py.
-
-This can be changed with the following code
+I originally found running the binary is the most reliable way for installing packages. Unfortunately, when making an
+executable this appears to work on your machine because the pip.exe path matches. On other machines this probably will
+not work.
 
 .. code-block:: python
 
@@ -78,10 +77,6 @@ This can be extended to run the subprocess in shell mode.
 
     pylibimport.VersionImporter.pip = pip_shell
 
-
-You should be able to use this method in a PyInstaller executable as well.
-I believe in some cases pip opens a subprocess which can cause problems with multiprocessing executables.
-I found pip_bin to be the most reliable method.
 
 
 Example

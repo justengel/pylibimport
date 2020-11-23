@@ -147,8 +147,7 @@ class IterProcess(subprocess.Popen):
 
 
 def pip_bin(*args, wait_func=None, **kwargs):
-    """Run pip using the binary/executable which is more reliable especially if it is bundled in an executable built
-    by PyInstaller.
+    """Run pip using the binary/executable.
 
     https://pip.pypa.io/en/stable/reference/
 
