@@ -3,12 +3,12 @@ import inspect
 import light_process as lp
 
 try:
-    from pip._internal import main as PIP_MAIN
+    from pip._internal import main as PIP_MAIN_FUNC
 except (ImportError, AttributeError, Exception):
     try:
-        from pip import main as PIP_MAIN
+        from pip import main as PIP_MAIN_FUNC
     except (ImportError, AttributeError, Exception):
-        PIP_MAIN = None  # Not available for some reason.
+        PIP_MAIN_FUNC = None  # Not available for some reason.
 
 from .utils import default_wait_func
 
@@ -18,7 +18,7 @@ __all__ = ['is_pip_main_available', 'pip_main', 'is_pip_proc_available', 'pip_pr
 
 def is_pip_main_available():
     """Return if the main pip function is available. Call get_pip_main before calling this function."""
-    return PIP_MAIN is not None
+    return PIP_MAIN_FUNC is not None
 
 
 is_pip_proc_available = is_pip_main_available
@@ -48,7 +48,7 @@ def pip_main(*args, **kwargs):
     """
     if not is_pip_main_available():
         raise EnvironmentError('The main pip function is not available for this environment! Try pip_bin.')
-    return PIP_MAIN(list(args))
+    return PIP_MAIN_FUNC(list(args))
 
 
 def pip_proc(*args, wait_func=None, **kwargs):
@@ -82,7 +82,7 @@ def pip_proc(*args, wait_func=None, **kwargs):
 
     try:
         # Calling pip_main is bad practice (could do undesirable things). Run it in another process ...
-        proc = lp.LightProcess(target=PIP_MAIN, args=(list(args), ))  # , name='pip_main')
+        proc = lp.LightProcess(target=PIP_MAIN_FUNC, args=(list(args), ))  # , name='pip_main')
         proc.start()
         while proc.exitcode is None:
             wait_func()
