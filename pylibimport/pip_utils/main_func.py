@@ -2,6 +2,9 @@ import sys
 import inspect
 import light_process as lp
 
+from pylibimport.pip_utils.utils import default_wait_func
+
+
 try:
     from pip._internal import main as PIP_MAIN_FUNC
 except (ImportError, AttributeError, Exception):
@@ -10,10 +13,8 @@ except (ImportError, AttributeError, Exception):
     except (ImportError, AttributeError, Exception):
         PIP_MAIN_FUNC = None  # Not available for some reason.
 
-from .utils import default_wait_func
 
-
-__all__ = ['is_pip_main_available', 'pip_main', 'is_pip_proc_available', 'pip_proc']
+__all__ = ['PIP_MAIN_FUNC', 'is_pip_main_available', 'pip_main', 'is_pip_proc_available', 'pip_proc']
 
 
 def is_pip_main_available():
