@@ -6,12 +6,15 @@ from pylibimport.pip_utils.utils import default_wait_func
 
 
 try:
-    from pip._internal import main as PIP_MAIN_FUNC
+    from pip._internal.cli.main import main as PIP_MAIN_FUNC
 except (ImportError, AttributeError, Exception):
     try:
-        from pip import main as PIP_MAIN_FUNC
+        from pip._internal import main as PIP_MAIN_FUNC
     except (ImportError, AttributeError, Exception):
-        PIP_MAIN_FUNC = None  # Not available for some reason.
+        try:
+            from pip import main as PIP_MAIN_FUNC
+        except (ImportError, AttributeError, Exception):
+            PIP_MAIN_FUNC = None  # Not available for some reason.
 
 
 __all__ = ['PIP_MAIN_FUNC', 'is_pip_main_available', 'pip_main', 'is_pip_proc_available', 'pip_proc']
