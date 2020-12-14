@@ -539,7 +539,7 @@ class VersionImporter(object):
         elif ext == '.zip' or tarfile.is_tarfile(path):
             return self.zip_import(name, version, path, import_chain)
         elif ext == '.whl':
-            return self.install(name, version, path, import_chain)
+            return self.install(path, name, version, import_chain)
 
     def _import_module(self, name, version, path, import_chain=None):
         """Import the given module name from the given import path.
@@ -625,7 +625,7 @@ class VersionImporter(object):
 
         return self._import_module(name, version, path, import_chain)
 
-    def install(self, name, version, path, import_chain=None, extra_install_args=None):
+    def install(self, path, name=None, version=None, import_chain=None, extra_install_args=None):
         """Import whl or zip files and return the installed module.
 
         Args:
@@ -643,6 +643,14 @@ class VersionImporter(object):
             extra_install_args = []
         elif isinstance(extra_install_args, str):
             extra_install_args = [extra_install_args]
+
+        # Check name and version
+        if name is None or version is None:
+            n, v = self.get_name_version(path)
+            if name is None:
+                name = n
+            if version is None:
+                version = v
 
         # Get the import path
         import_path = self.make_import_path(name, version)
