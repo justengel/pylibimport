@@ -43,6 +43,8 @@ def get_name_version(filename):
         name (str): Name of the library
         version (str): Version of the library
     """
+    if os.path.isdir(filename):
+        filename = os.path.join(filename, 'setup.py')
     if filename.lower().endswith('setup.py'):
         filename = os.path.abspath(str(filename))
         try:
@@ -97,20 +99,25 @@ def get_meta(filename):
 
 def get_setup_dict(filename):
     """Return the metadata dictionary from setup.py file."""
-    from setuptools import setup
-
     meta = {}
-    def my_setup(**attrs):
-        meta.update(attrs)
-    sys.modules['setuptools'].setup = my_setup
 
-    cwd = os.getcwd()
-    with open(filename, 'r') as f:
-        os.chdir(os.path.abspath(os.path.dirname(filename)))
-        exec(compile(f.read(), '<string>', 'exec'),
-             {'__name__': '__main__', '__file__': os.path.abspath(filename)})  # Hack __name__ and __file__ just in case
-        os.chdir(cwd)
+    try:
+        from setuptools import setup as orig_setup
 
-    sys.modules['setuptools'].setup = setup
+        def my_setup(**attrs):
+            meta.update(attrs)
+        sys.modules['setuptools'].setup = my_setup
+
+        cwd = os.getcwd()
+        with open(filename, 'r') as f:
+            os.chdir(os.path.abspath(os.path.dirname(filename)))
+            exec(compile(f.read(), '<string>', 'exec'),
+                 {'__name__': '__main__', '__file__': os.path.abspath(filename)})  # Hack __name__ and __file__ just in case
+            os.chdir(cwd)
+
+        sys.modules['setuptools'].setup = orig_setup
+
+    except (ImportError, Exception):
+        pass  # Failed to import
+
     return meta
-
