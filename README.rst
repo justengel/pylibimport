@@ -26,7 +26,7 @@ Pip Options
 ===========
 
 This library now provides multiple ways of using pip. The default method is by importing pip's main function and
-running it (pip_main). If you are using this in an executable `pip_bin` is recommended.
+running it (pip_main). If you are using this in an executable `pip_proc` is recommended.
 
 
 pip_main
