@@ -13,10 +13,12 @@ if __name__ == '__main__':
     P.add_argument('-e', '--extensions', metavar='N', type=str, nargs='+',
                    help='Allowed extensions (".whl", ".tar.gz")')
     P.add_argument('--min_version', type=str, default=None, help='Minimum version number to allow')
+    P.add_argument('--check', type=bool, default=True, help='Check compatibility for this version of python.')
     P.add_argument('--exclude', metavar='N', type=str, nargs='*', help='Exclude versions')
     ARGS = P.parse_args()
 
     FILENAME = HttpListVersions.download(ARGS.package, version=ARGS.version, download_dir=ARGS.download_dir,
                                          index_url=ARGS.index_url, extensions=ARGS.extensions,
-                                         min_version=ARGS.min_version, exclude=ARGS.exclude)
+                                         min_version=ARGS.min_version, exclude=ARGS.exclude,
+                                         check_compatibility=ARGS.check)
     print(FILENAME, 'saved!')

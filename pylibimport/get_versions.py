@@ -6,7 +6,7 @@ from urllib.parse import urljoin
 from html.parser import HTMLParser
 from packaging.version import parse as parse_version
 
-from pylibimport.utils import get_name_version, EXTENSIONS
+from pylibimport.utils import get_name_version, EXTENSIONS, get_compatibility_tags, is_compatible
 
 
 __all__ = ['uri_exists', 'HttpListVersions']
@@ -36,8 +36,10 @@ class HttpListVersions(HTMLParser):
     """
 
     EXTENSIONS = EXTENSIONS
+    is_compatible = staticmethod(is_compatible)
 
-    def __init__(self, index_url='https://pypi.org/simple/', extensions=None, min_version=None, exclude=None, **kwargs):
+    def __init__(self, index_url='https://pypi.org/simple/', extensions=None, min_version=None, exclude=None,
+                 check_compatibility=True, **kwargs):
         """Simple HTML parser to get the plugin, url names.
 
         Args:
@@ -45,6 +47,7 @@ class HttpListVersions(HTMLParser):
             extensions (list/str) [None]: List of allowed extensions (Example: [".whl", ".tar.gz"]).
             min_version (str)[None]: Minimum version to allow.
             exclude (list)[None]: List of versions that are excluded.
+            check_compatibility (bool)[True]: Check if the whl file works for this version of Python.
         """
         if extensions is None:
             extensions = self.EXTENSIONS
@@ -62,6 +65,7 @@ class HttpListVersions(HTMLParser):
 
         self.index_url = index_url
         self.extensions = extensions
+        self.check_compatibility = check_compatibility
         self._min_version = min_version
         self._min_version_parsed = parse_version(min_version or '-999.-999.-999')
         self._exclude = exclude
@@ -105,12 +109,16 @@ class HttpListVersions(HTMLParser):
             href = attrs.get('href', '')
 
         if tag == 'a' and (len(self.extensions) == 0 or any(ext in href for ext in self.extensions)):
-            href = urljoin(self.index_url, href)
-            name, version = get_name_version(href)
-            if (version not in self.exclude and parse_version(version) >= self._min_version_parsed and
-                    (name, version) not in self.saved_data):
-                self.saved_data[(name, version)] = href
-            # print(name, version, href)
+            if not self.check_compatibility or self.is_compatible(href):
+                href = urljoin(self.index_url, href)
+                name, version = get_name_version(href)
+                if (version not in self.exclude and parse_version(version) >= self._min_version_parsed and
+                        (name, version) not in self.saved_data):
+                    self.saved_data[(name, version)] = href
+                # print(name, version, href)
+
+    def is_my_version(self, href):
+        attrs = get_py_version(href)
 
     def handle_endtag(self, tag):
         pass
@@ -128,7 +136,7 @@ class HttpListVersions(HTMLParser):
 
     @classmethod
     def get_versions(cls, package, index_url='https://pypi.org/simple/', extensions=None,
-                     min_version=None, exclude=None, **kwargs):
+                     min_version=None, exclude=None, check_compatibility=True, **kwargs):
         """Return a series of package versions.
 
         Args:
@@ -137,11 +145,13 @@ class HttpListVersions(HTMLParser):
             extensions (list/str) [None]: List of allowed extensions (Example: [".whl", ".tar.gz"]).
             min_version (str)[None]: Minimum version to allow.
             exclude (list)[None]: List of versions that are excluded.
+            check_compatibility (bool)[True]: Check if the whl file works for this version of Python.
 
         Returns:
             data (OrderedDict): Dictionary of {(package name, version): href}
         """
-        parser = cls(index_url, extensions, min_version=min_version, exclude=exclude, **kwargs)
+        parser = cls(index_url, extensions, min_version=min_version, exclude=exclude,
+                     check_compatibility=check_compatibility, **kwargs)
         resp = requests.get(parser.index_url + package)
         if resp.status_code != 200:
             raise ValueError('Invalid URL.')
@@ -151,7 +161,7 @@ class HttpListVersions(HTMLParser):
 
     @classmethod
     def download(cls, package, version=None, download_dir='.', index_url='https://pypi.org/simple/', extensions=None,
-                 min_version=None, exclude=None, chunk_size=1024, **kwargs):
+                 min_version=None, exclude=None, check_compatibility=True, chunk_size=1024, **kwargs):
         """Return a series of package versions.
 
         Args:
@@ -162,13 +172,14 @@ class HttpListVersions(HTMLParser):
             extensions (list/str) [None]: List of allowed extensions (Example: [".whl", ".tar.gz"]).
             min_version (str)[None]: Minimum version to allow.
             exclude (list)[None]: List of versions that are excluded.
+            check_compatibility (bool)[True]: Check if the whl file works for this version of Python.
             chunk_size (int)[1024]: Save the file with this chunk size.
 
         Returns:
             filename (str): Filename of the downloaded file.
         """
-        versions = cls.get_versions(package, index_url=index_url, extensions=extensions,
-                                    min_version=min_version, exclude=exclude, **kwargs)
+        versions = cls.get_versions(package, index_url=index_url, extensions=extensions, min_version=min_version,
+                                    exclude=exclude, check_compatibility=check_compatibility, **kwargs)
         if version is None:
             href = versions[list(versions)[-1]]  # Get latest version
         else:
@@ -198,10 +209,12 @@ if __name__ == '__main__':
     P.add_argument('-e', '--extensions', metavar='N', type=str, nargs='+',
                    help='Allowed extensions (".whl", ".tar.gz")')
     P.add_argument('--min_version', type=str, default=None, help='Minimum version number to allow')
+    P.add_argument('--check', type=bool, default=True, help='Check compatibility for this version of python.')
     P.add_argument('--exclude', metavar='N', type=str, nargs='*', help='Exclude versions')
     ARGS = P.parse_args()
 
     VERSIONS = HttpListVersions.get_versions(ARGS.package, index_url=ARGS.index_url, extensions=ARGS.extensions,
-                                             min_version=ARGS.min_version, exclude=ARGS.exclude)
+                                             min_version=ARGS.min_version, exclude=ARGS.exclude,
+                                             check_compatibility=ARGS.check)
     for (N, V), HREF in VERSIONS.items():
         print(N, V, HREF)

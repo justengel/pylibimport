@@ -1,11 +1,22 @@
 import os
 import re
 import sys
+from packaging.tags import sys_tags
 
 
-__all__ = ['EXTENSIONS', 'make_import_name', 'get_name_version', 'is_python_package', 'get_setup_dict', 'get_meta']
+__all__ = ['EXTENSIONS', 'make_import_name', 'get_name_version', 'get_compatibility_tags', 'is_compatible' 
+           'is_python_package', 'get_setup_dict', 'get_meta']
 
 
+def get_supported():
+    tags = [(t.interpreter, t.abi, t.platform) for t in sys_tags()]
+    for t in list(tags):
+        if t[1].startswith('cp'):
+            tags.append((t[0], t[1]+'m', t[2]))  # Copy tags with 'm' added to the abi
+    return tags
+
+
+SUPPORTED = get_supported()
 EXTENSIONS = ['.whl', '.tar.gz', '.tar', '.zip', '.dist-info']
 
 WHEEL_INFO_RE = re.compile(
@@ -63,6 +74,7 @@ def get_name_version(filename):
                 pass
 
     # Try parsing the wheel file format
+    filename = filename.split('#', 1)[0]  # Strip off md5 if applicable
     filename = os.path.basename(filename)
     try:
         attrs = WHEEL_INFO_RE(filename).groupdict()
@@ -82,6 +94,56 @@ def get_name_version(filename):
     version = attrs.get('version', '0.0.0')
 
     return attrs['name'], version
+
+
+def get_compatibility_tags(filename):
+    """Get the python version and os architecture to check against.
+
+    Args:
+        filename (str): Wheel filename that ends in .whl
+
+    Returns:
+        pyver (str)['py3']: Python version of the library py3 or cp38 ...
+        abi (str)['none']: ABI version abi3, none, cp33m ...
+        plat (str)['any']: Platform of the library none, win32, or win_amd64
+    """
+    # Try parsing the wheel file format
+    filename = filename.split('#', 1)[0]  # Strip off md5 if applicable
+    filename = os.path.basename(filename)
+    fname = os.path.splitext(filename)[0]
+    try:
+        attrs = WHEEL_INFO_RE(filename).groupdict()
+    except:
+        try:
+            if '.tar.gz' in filename:  # .tar.gz has two "." so the extension needs to be removed twice.
+                fname = os.path.splitext(fname)[0]
+            attrs = NAME_VER_RE(fname).groupdict()
+        except:
+            attrs = {'name': fname, 'version': '0.0.0'}
+            py_ver_found = False
+            for item in fname.split('-')[2:]:  # Skip name and version
+                if not py_ver_found and (item.startswith('py') or item.startswith('cp')):
+                    py_ver_found = True
+                    item['pyver'] = item
+                elif (item.startswith('cp') or item.startswith('none') or item.startswith('abi')):
+                    item['abi'] = item
+                elif item.startswith('any') or item.startswith('win') or item.startswith('linux'):
+                    item['plat'] = item
+            if '-' in attrs['name']:
+                split = attrs['name'].split('-')
+                attrs['name'] = split[0]
+                attrs['version'] = split[1]
+
+    # Assume correct version if not found.
+    return (attrs.get('pyver', 'py{}'.format(sys.version_info[0])),
+            attrs.get('abi', 'none'),
+            attrs.get('plat', 'any'))
+
+
+def is_compatible(filename):
+    """Return if the given filename is available on this system."""
+    pyver, abi, plat = get_compatibility_tags(filename)
+    return (pyver, abi, plat) in SUPPORTED
 
 
 def is_python_package(directory):
