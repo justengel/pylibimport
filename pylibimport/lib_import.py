@@ -421,10 +421,19 @@ class VersionImporter(object):
         except (KeyError, ValueError, TypeError, Exception):
             pass
 
+        # Remove from sys.modules
+        try:
+            import_name = self.make_import_name(name, version)
+            del sys.modules[import_name]
+        except (KeyError, ValueError, TypeError, Exception):
+            pass
+
         # Always delete installed
         try:
             shutil.rmtree(directory, ignore_errors=True)
         except (OSError, Exception):
+            # This may not be successful with C extensions.
+            # When process is closed and new process tries to delete it should be successful.
             pass
 
     delete_module = delete_installed
