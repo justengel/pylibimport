@@ -1,5 +1,6 @@
 import sys
 import inspect
+import multiprocessing as mp
 import light_process as lp
 
 from pylibimport.pip_utils.utils import default_wait_func
@@ -17,7 +18,7 @@ except (ImportError, AttributeError, Exception):
             PIP_MAIN_FUNC = None  # Not available for some reason.
 
 
-__all__ = ['PIP_MAIN_FUNC', 'is_pip_main_available', 'pip_main', 'is_pip_proc_available', 'pip_proc']
+__all__ = ['PIP_MAIN_FUNC', 'is_pip_main_available', 'pip_main', 'is_pip_proc_available', 'pip_proc', 'pip_proc_flag']
 
 
 def is_pip_main_available():
@@ -94,4 +95,43 @@ def pip_proc(*args, wait_func=None, **kwargs):
 
         return getattr(proc, 'exitcode', 1)
     except (ValueError, TypeError, OSError, Exception) as err:
+        return 1
+
+
+def _pip_proc_flag(*args, finished_flag=None, success_flag=None, **kwargs):
+    """Run pip and flag when it is finished."""
+    ret = 1
+    try:
+        ret = PIP_MAIN_FUNC(list(args))
+    finally:
+        if ret == 0 and success_flag is not None:
+            success_flag.set()
+        if finished_flag is not None:
+            finished_flag.set()
+    return ret
+
+
+def pip_proc_flag(*args, wait_func=None, **kwargs):
+    """Old multiprocessing does not successfully use exitcode to check if the process is finished."""
+    if wait_func is None:
+        wait_func = default_wait_func
+
+    try:
+        kwargs['finished_flag'] = finished_flag = mp.Event()
+        kwargs['success_flag'] = success_flag = mp.Event()
+        proc = mp.Process(target=_pip_proc_flag, args=args, kwargs=kwargs)
+        proc.start()
+        while not finished_flag.is_set():
+            wait_func()
+        proc.join(1)
+        try:
+            proc.terminate()  # Make sure it closed
+        except:
+            pass
+
+        exitcode = getattr(proc, 'exitcode', 1)
+        if success_flag.is_set():
+            exitcode = 0
+        return exitcode
+    except(ValueError, TypeError, Exception):
         return 1
