@@ -164,6 +164,9 @@ This approach also lets you separate things by version number which may be usefu
 The main problem I faced was working with pip to install .whl files. These problems are explained in further in the
 Pip Options section.
 
+... One other major problem. You can't really delete a C Extension after it is imported. Keep this in mind!
+
+
 Pip Options
 ===========
 
