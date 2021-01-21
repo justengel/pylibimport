@@ -1,11 +1,15 @@
 import os
 import re
 import sys
-from packaging.tags import sys_tags
+
+from packaging.tags import sys_tags, parse_tag
+from packaging.utils import canonicalize_name, canonicalize_version
+from packaging.version import Version, InvalidVersion
 
 
-__all__ = ['EXTENSIONS', 'make_import_name', 'get_name_version', 'get_compatibility_tags', 'is_compatible' 
-           'is_python_package', 'get_setup_dict', 'get_meta']
+__all__ = ['make_import_name', 'get_name_version', 'get_compatibility_tags',
+           'parse_filename', 'parse_wheel_filename', 'parse_sdist_filename',
+           'is_compatible', 'get_meta', 'get_setup_dict']
 
 
 def get_supported():
@@ -17,17 +21,6 @@ def get_supported():
 
 
 SUPPORTED = get_supported()
-EXTENSIONS = ['.whl', '.tar.gz', '.tar', '.zip', '.dist-info']
-
-WHEEL_INFO_RE = re.compile(
-        r"""^(?P<namever>(?P<name>.+?)-(?P<version>(\d*)(\.(a|b|rc)?\d+)?(\.(post|dev)?\d+)?))(-(?P<build>\d.*?))?
-         -(?P<pyver>[a-z].+?)-(?P<abi>.+?)-(?P<plat>.+?)(\.whl|\.dist-info|\.zip|\.tar\.gz|\.tar)?$""",
-        re.VERBOSE).match
-
-NAME_VER_RE = re.compile(
-        r"""^(?P<namever>(?P<name>.+?)-(?P<version>[.a-zA-Z0-9]*))""",
-    re.VERBOSE).match
-
 _CONVERT_UNDERSCORE = re.compile("[^\w]+")
 
 
@@ -48,7 +41,7 @@ def get_name_version(filename):
     """Parse a wheel filename.
 
     Args:
-        filename (str): Wheel filename that ends in .whl
+        filename (str): Wheel filename that ends in .whl or sdist filename that ends with .tar.gz.
 
     Returns:
         name (str): Name of the library
@@ -73,66 +66,24 @@ def get_name_version(filename):
             except (FileNotFoundError, PermissionError, TypeError, KeyError, Exception):
                 pass
 
-    # Try parsing the wheel file format
-    filename = filename.split('#', 1)[0]  # Strip off md5 if applicable
-    filename = os.path.basename(filename)
-    try:
-        attrs = WHEEL_INFO_RE(filename).groupdict()
-    except:
-        try:
-            if '.tar.gz' in filename:  # .tar.gz has two "." so the extension needs to be removed twice.
-                filename = os.path.splitext(filename)[0]
-            attrs = NAME_VER_RE(os.path.splitext(filename)[0]).groupdict()
-        except:
-            attrs = {'name': os.path.splitext(filename)[0], 'version': '0.0.0'}
-            if '-' in attrs['name']:
-                split = attrs['name'].split('-')
-                attrs['name'] = split[0]
-                attrs['version'] = split[1]
-
-    # Get a version
-    version = attrs.get('version', '0.0.0')
-
-    return attrs['name'], version
+    # Parse the wheel filename or sdist filename
+    attrs = parse_filename(filename)
+    return attrs['name'], str(attrs['version'])
 
 
 def get_compatibility_tags(filename):
     """Get the python version and os architecture to check against.
 
     Args:
-        filename (str): Wheel filename that ends in .whl
+        filename (str): Wheel filename that ends in .whl or sdist filename that ends with .tar.gz.
 
     Returns:
         pyver (str)['py3']: Python version of the library py3 or cp38 ...
         abi (str)['none']: ABI version abi3, none, cp33m ...
         plat (str)['any']: Platform of the library none, win32, or win_amd64
     """
-    # Try parsing the wheel file format
-    filename = filename.split('#', 1)[0]  # Strip off md5 if applicable
-    filename = os.path.basename(filename)
-    fname = os.path.splitext(filename)[0]
-    try:
-        attrs = WHEEL_INFO_RE(filename).groupdict()
-    except:
-        try:
-            if '.tar.gz' in filename:  # .tar.gz has two "." so the extension needs to be removed twice.
-                fname = os.path.splitext(fname)[0]
-            attrs = NAME_VER_RE(fname).groupdict()
-        except:
-            attrs = {'name': fname, 'version': '0.0.0'}
-            py_ver_found = False
-            for item in fname.split('-')[2:]:  # Skip name and version
-                if not py_ver_found and (item.startswith('py') or item.startswith('cp')):
-                    py_ver_found = True
-                    item['pyver'] = item
-                elif (item.startswith('cp') or item.startswith('none') or item.startswith('abi')):
-                    item['abi'] = item
-                elif item.startswith('any') or item.startswith('win') or item.startswith('linux'):
-                    item['plat'] = item
-            if '-' in attrs['name']:
-                split = attrs['name'].split('-')
-                attrs['name'] = split[0]
-                attrs['version'] = split[1]
+    # Parse the wheel filename or sdist filename
+    attrs = parse_filename(filename)
 
     # Assume correct version if not found.
     return (attrs.get('pyver', 'py{}'.format(sys.version_info[0])),
@@ -140,15 +91,129 @@ def get_compatibility_tags(filename):
             attrs.get('plat', 'any'))
 
 
+def parse_filename(filename):
+    """Parse a wheel filename or sdist filename and return the attributes.
+
+    Args:
+        filename (str): Wheel filename that ends in .whl or sdist filename that ends with .tar.gz.
+
+    Returns:
+        attrs (dict): Dictionary of attributes "name", "version", "build", "pyver", "abi", "plat".
+    """
+    attrs = {'name': '', 'version': '0.0.0', 'build': '', 'pyver': 'py{}'.format(sys.version_info[0]),
+             'abi': 'none', 'plat': 'any'}
+
+    # Format the filename
+    filename = filename.split('#', 1)[0]  # Strip off md5 if applicable
+    filename = os.path.basename(filename)
+
+    try:
+        # Use parse_wheel_filename
+        values = parse_wheel_filename(filename)
+        attrs['name'], attrs['version'], attrs['build'], attrs['pyver'], attrs['abi'], attrs['plat'] = values
+
+    except (AttributeError, ValueError, Exception):
+        try:
+            # Use parse_sdist_filename
+            values = parse_sdist_filename(filename)
+            attrs['name'], attrs['version'] = values
+        except (AttributeError, ValueError, Exception):
+            fname = os.path.splitext(filename)[0]
+            attrs['name'] = fname
+
+            count = fname.count('-')
+            if count >= 4:
+                count = 4
+
+            # Split the filename
+            parts = fname.rsplit('-', count)
+
+            # Find name and version
+            if len(parts) >= 2:
+                attrs['name'] = parts[0]
+                attrs['version'] = parts[1]
+            if '-' in attrs['name']:
+                split = attrs['name'].split('-')
+                attrs['name'] = split[0]
+                attrs['version'] = split[1]
+
+            # Find other
+            py_ver_found = False
+            for item in parts[2:]:  # Skip name and version
+                if not py_ver_found and (item.startswith('py') or item.startswith('cp')):
+                    py_ver_found = True
+                    attrs['pyver'] = item
+                elif (item.startswith('cp') or item.startswith('none') or item.startswith('abi')):
+                    attrs['abi'] = item
+                elif item.startswith('any') or item.startswith('win') or item.startswith('linux'):
+                    attrs['plat'] = item
+
+    return attrs
+
+
+def parse_wheel_filename(filename):
+    """Parse the wheel filename.
+
+    Modified from: https://github.com/pypa/packaging/blob/master/packaging/utils.py
+    """
+    if not filename.endswith(".whl"):
+        raise ValueError("Invalid wheel filename (extension must be '.whl'): {0}".format(filename))
+
+    # Remove extension
+    filename = filename[:-4]
+
+    # Check number of dashes
+    dashes = filename.count("-")
+    if dashes < 4:  # Could always have more dashing in the "name" portion
+        raise ValueError("Invalid wheel filename (wrong number of parts): {0}".format(filename))
+
+    # Split the filename components
+    name, version, pyver, abi, plat = filename.rsplit("-", 4)
+    build = ''
+
+    try:
+        # Check if name contains versoin
+        if '.' in name:
+            raise ValueError  # name contains name and version while version is build?
+        version = Version(version)
+    except (InvalidVersion, ValueError, Exception):
+        try:
+            build = version
+            name, version = name.rsplit('-', 1)
+            version = Version(version)  # If this fails it is just invalid
+        except (InvalidVersion, ValueError, Exception) as err:
+            raise ValueError('Invalid version string "{}"!'.format(version)) from err
+
+    # Check name formatting
+    if "__" in name or re.match(r"^[\w\d._]*$", name, re.UNICODE) is None:
+        raise ValueError("Invalid project name: {}".format(filename))
+
+    name = canonicalize_name(name_part)
+    return (name, version, build, pyver, abi, plat)
+
+
+def parse_sdist_filename(filename):
+    """Parse the sdist filename.
+
+    Modified from: https://github.com/pypa/packaging/blob/master/packaging/utils.py
+    """
+    # Remove extension
+    filename = os.path.splitext(filename)[0]  # '.tar.gz', '.zip', '.dist-info'
+    if filename.endswith('.tar'):
+        filename = os.path.splitext(filename)[0]
+
+    # We are requiring a PEP 440 version, which cannot contain dashes,
+    # so we split on the last dash.
+    name, version = filename.rsplit('-', 1)
+    name = canonicalize_name(name)
+    version = Version(version)
+    return (name, version)
+
+
 def is_compatible(filename):
     """Return if the given filename is available on this system."""
     pyver, abi, plat = get_compatibility_tags(filename)
     return (pyver, abi, plat) in SUPPORTED
-
-
-def is_python_package(directory):
-    """Return if the given directory has an __init__.py."""
-    return os.path.exists(os.path.join(directory, '__init__.py'))
 
 
 def get_meta(filename):

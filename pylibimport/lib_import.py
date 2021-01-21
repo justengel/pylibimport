@@ -11,9 +11,11 @@ import platform
 from collections import OrderedDict
 from packaging.version import parse as parse_version
 
-from .utils import make_import_name, get_name_version, is_python_package
+from .utils import make_import_name, get_name_version
 from .get_versions import HttpListVersions, uri_exists
 from .pip_utils import default_wait_func, pip_main, pip_bin, pip_proc
+from .install import InstallError, original_system, import_module, install_lib, \
+    register_install_type, remove_install_type, get_install_func, is_python_package, is_zip
 
 
 if getattr(sys, 'frozen', False):
@@ -28,11 +30,7 @@ if getattr(sys, 'frozen', False):
         sys.prefix = sys.executable
 
 
-__all__ = ['InstallError', 'VersionImporter']
-
-
-class InstallError(Exception):
-    pass
+__all__ = ['VersionImporter']
 
 
 class VersionImporter(object):
@@ -41,15 +39,16 @@ class VersionImporter(object):
     RUNNING_PYTHON_VERSION = "{}.{}.{}-{}"\
         .format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro, platform.architecture()[0])
 
-    DEFAULT_PYTHON_EXTENSIONS = ['.py', '.pyc', '.pyd']
-
     pip = staticmethod(pip_main)
     wait_func = staticmethod(default_wait_func)
     get_name_version = staticmethod(get_name_version)
     make_import_name = staticmethod(make_import_name)
+    original_system = staticmethod(original_system)
+    register_install_type = staticmethod(register_install_type)
+    remove_install_type = staticmethod(remove_install_type)
 
     def __init__(self, download_dir=None, install_dir=None, index_url='https://pypi.org/simple/', python_version=None,
-                 python_extensions=None, install_dependencies=False, reset_modules=True, **kwargs):
+                 install_dependencies=False, reset_modules=True, **kwargs):
         """Initialize the library
 
         Args:
@@ -57,7 +56,6 @@ class VersionImporter(object):
             install_dir (str)[None]: Name of the directory to install the packages to.
             index_url (str)['https://pypi.org/simple/']: Index url for downloading files.
             python_version (str)[None]: Python version indicator used for the installation path (import_path).
-            python_extensions (list)[None]: Available python extensions to try to import normally.
             install_dependencies (bool)[False]: If True .whl files will install dependencies into the install_dir.
             reset_modules (bool)[True]: Reset the state of sys.modules after importing.
                 Dependencies will not be loaded into sys.modules.
@@ -65,14 +63,11 @@ class VersionImporter(object):
         """
         if python_version is None:
             python_version = self.RUNNING_PYTHON_VERSION
-        if python_extensions is None:
-            python_extensions = self.DEFAULT_PYTHON_EXTENSIONS
 
         self.python_version = python_version
         self._download_dir = None
         self._install_dir = None
         self.index_url = index_url
-        self.python_extensions = python_extensions
         self.install_dependencies = install_dependencies
         self.reset_modules = reset_modules
         self.modules = {}
@@ -203,31 +198,6 @@ class VersionImporter(object):
         """Add a module to the system modules."""
         sys.modules[import_name] = module
 
-    @contextlib.contextmanager
-    def original_system(self, new_path=None, reset_modules=True):
-        """Context manager to reset sys.path and sys.modules to the previous state before the context operation.
-
-        Args:
-            new_path (str)[None]: Temporarily add a path to sys.path before the operation.
-            reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
-        """
-        modules = sys.modules.copy()
-        paths = copy.copy(sys.path)
-        path_cache = sys.path_importer_cache.copy()
-
-        # Temporarily add the new path
-        if new_path and new_path not in sys.path:
-            sys.path.insert(0, new_path)
-
-        yield
-
-        if reset_modules:
-            # sys.modules = modules  # For some reason this causes conflicts with relative imports?
-            sys.modules.clear()
-            sys.modules.update(modules)
-        sys.path = paths
-        sys.path_importer_cache = path_cache
-
     def iter_installed_versions(self, package=None, install_dir=None, python_version=None):
         """Iterate through installed versions of a packge yielding the available options.
 
@@ -293,10 +263,7 @@ class VersionImporter(object):
             for filename in os.listdir(download_dir):
                 with contextlib.suppress(*exceptions):
                     path = os.path.join(download_dir, filename)
-                    ext = os.path.splitext(filename)[-1].lower()
-                    if (ext in self.python_extensions or
-                            (ext == '' and is_python_package(path)) or
-                            (ext == '.zip' or tarfile.is_tarfile(path) or ext == '.whl')):
+                    if get_install_func(path) is not None:
                         name, version = self.get_name_version(path)
                         import_name = self.make_import_name(name, version)
                         if package is None or package == name or import_name == package or filename.endswith(package):
@@ -402,10 +369,16 @@ class VersionImporter(object):
             version (str)[None]: Project version to delete.
         """
         if not isinstance(name, str):
+            with contextlib.suppress(AttributeError, Exception):
+                if version is None:
+                    version = name.__import_version__
             try:
                 name = name.__module__
             except (AttributeError, Exception):
-                name = str(name)
+                try:
+                    name = name.__name__
+                except (AttributeError, Exception):
+                    name = str(name)
 
         # Get the installed directory
         directory = self.make_import_path(name, version or '')
@@ -509,6 +482,41 @@ class VersionImporter(object):
         """Handle an import error."""
         raise error
 
+    def install(self, path, name=None, version=None, import_chain=None, extra_install_args=None):
+        """Install the package with the name and version.
+
+        Args:
+            path (str): Path to install
+            name (str)[None]: Name of the package/module.
+            version (str)[None]: Version of the package/module.
+
+        Returns:
+            module (ModuleType)[None]: Module that was imported by the name or import_chain.
+        """
+        # Get a valid name and version
+        if name is None or version is None:
+            n, v = self.get_name_version(path)
+            if name is None:
+                name = n
+            if version is None:
+                version = v
+
+        # Get the import path (install destination)
+        import_path = self.make_import_path(name, version)
+
+        # Try to install the package
+        install_kwargs = {
+            'pip': self.pip,
+            'wait_func': self.wait_func,
+            'reset_modules': self.reset_modules,
+            'install_dependencies': self.install_dependencies,
+            'extra_install_args': extra_install_args,
+            }
+        install_lib(path, import_path, **install_kwargs)
+
+        # Try to import the installed module
+        return self.import_path(import_path, name, version, import_chain)
+
     def import_module(self, name, version=None, import_chain=None):
         """Import the given module or package."""
         # Check if valid path
@@ -537,25 +545,39 @@ class VersionImporter(object):
             self.init()
 
         # Check if import name is available
-        module = self._import_module(name, version, path, import_chain)
+        import_path = self.make_import_path(name, version)
+        module = self.import_path(import_path, name, version, import_chain)
         if module is not None:
             return module
 
-        # Check extension
-        ext = os.path.splitext(path)[-1].lower()
-        if ext in self.python_extensions or (ext == '' and is_python_package(path)):
-            return self.py_import(name, version, path, import_chain)
-        elif ext == '.zip' or tarfile.is_tarfile(path):
-            return self.zip_import(name, version, path, import_chain)
-        elif ext == '.whl':
+        # Try to install and import
+        try:
             return self.install(path, name, version, import_chain)
+        except Exception as err:
+            self.error(err)
 
-    def _import_module(self, name, version, path, import_chain=None):
-        """Import the given module name from the given import path.
+    def import_path(self, import_path, name=None, version=None, import_chain=None):
+        """Import the given path.
 
         Args:
-            name
+            import_path (str): Path to import (path to file/folder).
+            name (str)[None]: Name of the package to import.
+            version (str)[None]: Version of the package to import. This makes the import name "name_version" if you
+                want to use the normal python import after this.
+            import_chain (str)[None]: Import chain ("custom.run_custom" to just import the function).
+
+        Returns:
+            module (types.ModuleType/function/object): Object that was imported.
         """
+        # Get name and version
+        if name is None or version is None:
+            n, v = self.get_name_version(import_path)
+            if name is None:
+                name = n
+            if version is None:
+                version = v
+
+        # Check if import_chain exists
         if import_chain is None:
             import_chain = name
         if import_chain in self.modules:
@@ -563,14 +585,10 @@ class VersionImporter(object):
             if version in modules:
                 return modules[version]
 
-        # Check if import name is available
-        import_path = self.make_import_path(name, version)
-        if os.path.exists(import_path):
+        # Import the path
+        module = import_module(import_path, import_chain, reset_modules=self.reset_modules, error_clbk=self.error)
+        if module is not None:
             try:
-                # Import the module
-                with self.original_system(import_path, reset_modules=self.reset_modules):
-                    module = importlib.import_module(import_chain)  # module = __import__(name)
-
                 # Save in sys.modules with version
                 import_name = self.make_import_name(import_chain, version)
                 if not self.reset_modules:
@@ -579,111 +597,20 @@ class VersionImporter(object):
                     self.add_module(import_name, module)
 
                 # Save module to my modules
-                if import_chain not in self.modules:
+                try:
+                    self.modules[import_chain][version] = module
+                except (KeyError, Exception):
                     self.modules[import_chain] = {}
-                self.modules[import_chain][version] = module
+                    self.modules[import_chain][version] = module
 
                 # Save the import version
                 try:
                     module.__import_version__ = version
                 except (AttributeError, Exception):
                     pass
-
-                return module
-            except (ImportError, Exception) as err:
+            except (ValueError, TypeError, ImportError, Exception) as err:
                 self.error(err)
-                return
-
-    def py_import(self, name, version, path, import_chain=None):
-        """Return the normal python import."""
-        # Get the import path
-        import_path = self.make_import_path(name, version)
-
-        # Make the path exist in the target dir
-        if not os.path.exists(import_path):
-            os.makedirs(import_path)
-            try:
-                # Create symlink
-                os.symlink(path, import_path, target_is_directory=os.path.isdir(path))
-            except OSError:
-                if os.path.isdir(path):
-                    shutil.copytree(path, import_path)
-                else:
-                    shutil.copy(path, import_path)
-
-        return self._import_module(name, version, path, import_chain)
-
-    def zip_import(self, name, version, path, import_chain=None):
-        """Import whl or zip files."""
-        # Get the import path
-        import_path = self.make_import_path(name, version)
-
-        # Extract to import location.
-        if not os.path.exists(import_path):
-            os.makedirs(import_path)
-
-            # Extract to zip
-            shutil.unpack_archive(path, import_path)
-            if not any(p == name for p in os.listdir(import_path)):
-                # Move items up one directory
-                for p in os.listdir(import_path):
-                    nested_path = os.path.join(import_path, p)
-                    for np in os.listdir(nested_path):
-                        shutil.move(os.path.join(nested_path, np), os.path.join(import_path, np))
-                    # shutil.rmtree(nested_path)
-
-        return self._import_module(name, version, path, import_chain)
-
-    def install(self, path, name=None, version=None, import_chain=None, extra_install_args=None):
-        """Import whl or zip files and return the installed module.
-
-        Args:
-            name (str): Package name to install. Used to find the install path.
-            version (str): Package version to install. Used to find the install path.
-            path (str): Filepath to the package that will be installed.
-            import_chain (str)[None]: Chain of packages to import ('module1.submodule.submodule2'). If none name is used
-            extra_install_args (list/str): List of extra parameters to pass into the pip install command.
-                Note: the '--target' argument is already being used.
-
-        Returns:
-            module (ModuleType)[None]: Module object that was imported or None if failed.
-        """
-        if not extra_install_args:
-            extra_install_args = []
-        elif isinstance(extra_install_args, str):
-            extra_install_args = [extra_install_args]
-
-        # Check name and version
-        if name is None or version is None:
-            n, v = self.get_name_version(path)
-            if name is None:
-                name = n
-            if version is None:
-                version = v
-
-        # Get the import path
-        import_path = self.make_import_path(name, version)
-
-        # Install the wheel file to the target directory
-        try:
-            os.makedirs(import_path, exist_ok=True)
-        except:
-            pass
-        with self.original_system(import_path, reset_modules=self.reset_modules):
-            args = ['install', '--target', import_path] + extra_install_args + [path]
-            if not self.install_dependencies:
-                args.insert(1, '--no-deps')
-
-            exitcode = self.pip(*args, wait_func=self.wait_func)
-            if exitcode != 0:
-                try:
-                    shutil.rmtree(import_path)
-                except (OSError, Exception):
-                    pass
-                self.error(InstallError('Could not install using pip with arguments {}'.format(args)))
-                return None
-
-        return self._import_module(name, version, path, import_chain)
+        return module
 
     def cleanup(self):
         """Properly close the tempfile directory."""
@@ -694,3 +621,41 @@ class VersionImporter(object):
         return self
 
     close = cleanup
+
+
+# ===== Make the module callable =====
+# https://stackoverflow.com/a/48100440/1965288  # https://stackoverflow.com/questions/1060796/callable-modules
+MY_MODULE = sys.modules[__name__]
+
+
+class LibImportModule(MY_MODULE.__class__):
+
+    MAIN_VERSION_IMPORTER = None
+
+    def __call__(self, import_path, name=None, version=None, import_chain=None):
+        """Import the given path.
+
+        Args:
+            import_path (str): Path to import (path to file/folder).
+            name (str)[None]: Name of the package to import.
+            version (str)[None]: Version of the package to import. This makes the import name "name_version" if you
+                want to use the normal python import after this.
+            import_chain (str)[None]: Import chain ("custom.run_custom" to just import the function).
+
+        Returns:
+            module (types.ModuleType/function/object): Object that was imported.
+        """
+        importer = self.MAIN_VERSION_IMPORTER
+        if importer is None:
+            importer  = self.MAIN_VERSION_IMPORTER = VersionImporter()
+        return importer.import_path(import_path, name=name, version=version, import_chain=import_chain)
+
+# Override the module make it callable
+try:
+    MY_MODULE.__class__ = LibImportModule  # Override __class__ (Python 3.6+)
+    MY_MODULE.__doc__ = LibImportModule.__call__.__doc__
+except (TypeError, Exception):
+    # < Python 3.6 Create the module and make the attributes accessible
+    sys.modules[__name__] = MY_MODULE = LibImportModule(__name__)
+    for ATTR in __all__:
+        setattr(MY_MODULE, ATTR, vars()[ATTR])

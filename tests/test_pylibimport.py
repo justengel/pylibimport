@@ -47,7 +47,7 @@ def test_import_path():
     v.download_dir = '.'
 
     # Use path not connected to download_dir
-    custom = v.import_module(os.path.abspath('./sub/import_dir/custom.py'))
+    custom = v.import_path(os.path.abspath('./sub/import_dir/custom.py'))
     assert custom is not None
     assert custom.run_custom() == 'hello'
 

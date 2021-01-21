@@ -86,11 +86,29 @@ def test_name_version_meta():
     assert version == __meta__.version, '{} != {}'.format(version, __meta__.version)
 
 
+def test_get_compatibility_tags():
+    import sys
+    import re
+    from pylibimport.utils import get_compatibility_tags, is_compatible
+
+    pyver = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+    filename = 'dynamicmethod-1.0.2rc1-cp{0}-cp{0}m-win_amd64.whl'.format(pyver)
+    get_compatibility_tags(filename)
+
+    pyver = '{}{}'.format(sys.version_info[0], sys.version_info[1])
+    filename = 'dynamicmethod-1.0.2rc1-cp{0}-cp{0}m-win_amd64.whl'.format(pyver)
+    assert is_compatible(filename)
+
+    filename = 'dynamicmethod-1.0.2rc1-cp{0}-cp{0}m-win_amd64.whl'.format(10)
+    assert not is_compatible(filename)
+
+
 if __name__ == '__main__':
     test_name_version_wheel()
     test_name_version_zip()
     test_name_version_py()
     test_name_version_setup_py()
     test_name_version_meta()
+    test_get_compatibility_tags()
 
     print('All tests finished successfully!')
