@@ -9,6 +9,8 @@ importer = pylibimport.VersionImporter(install_dir='./sub/target_dir')
 
 mod = importer.install('./sub/import_dir/dynamicmethod-1.0.4-py3-none-any.whl', 'dynamicmethod', '1.0.4')
 
+pylibimport.run_pip('--help')
+
 
 if __name__ == '__main__':
     print(mod)

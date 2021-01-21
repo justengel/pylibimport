@@ -3,7 +3,7 @@ import inspect
 import multiprocessing as mp
 import light_process as lp
 
-from pylibimport.pip_utils.utils import default_wait_func
+from pylibimport.run_pip.utils import default_wait_func
 
 
 try:

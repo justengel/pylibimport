@@ -4,7 +4,7 @@ from .utils import make_import_name, get_name_version, get_compatibility_tags, \
     parse_filename, parse_wheel_filename, parse_sdist_filename, \
     is_compatible, get_meta, get_setup_dict
 
-from .pip_utils import default_wait_func, \
+from .run_pip import default_wait_func, \
     find_file, IterProcess, pip_bin, \
     PIP_MAIN_FUNC, is_pip_main_available, pip_main, \
     is_pip_proc_available, pip_proc, pip_proc_flag

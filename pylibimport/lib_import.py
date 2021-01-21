@@ -13,7 +13,7 @@ from packaging.version import parse as parse_version
 
 from .utils import make_import_name, get_name_version
 from .get_versions import HttpListVersions, uri_exists
-from .pip_utils import default_wait_func, pip_main, pip_bin, pip_proc
+from .run_pip import default_wait_func, pip_main, pip_bin, pip_proc
 from .install import InstallError, original_system, import_module, install_lib, \
     register_install_type, remove_install_type, get_install_func, is_python_package, is_zip
 

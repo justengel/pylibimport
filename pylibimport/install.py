@@ -8,7 +8,7 @@ import importlib
 from collections import OrderedDict
 
 from pylibimport.utils import get_name_version
-from pylibimport.pip_utils import default_wait_func, pip_main
+from pylibimport.run_pip import default_wait_func, pip_main
 
 
 __all__ = ['InstallError', 'original_system', 'import_module', 'install_lib',
