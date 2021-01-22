@@ -46,17 +46,19 @@ def original_system(new_path=None, reset_modules=True):
     sys.path_importer_cache = path_cache
 
 
-def import_module(path, import_chain=None, reset_modules=True, error_clbk=None):
+def import_module(path, import_chain=None, reset_modules=True):
     """Import the given module name from the given import path.
 
     Args:
         path (str): Directory which contains the module to import.
         import_chain (str): Chain to import with.
         reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
-        error_clbk (callable/function)[None]: Function that takes in the error if an error occurs.
 
     Returns:
         module (ModuleType): Module object that was imported.
+
+    Raises:
+        ImportError: If the import is unsuccessful.
     """
     if import_chain is None:
         import_chain, _ = get_name_version(path)
@@ -64,14 +66,10 @@ def import_module(path, import_chain=None, reset_modules=True, error_clbk=None):
         path = os.path.dirname(path)
 
     if os.path.exists(path):
-        try:
-            # Import the module
-            with original_system(path, reset_modules=reset_modules):
-                module = importlib.import_module(import_chain)  # module = __import__(name)
-            return module
-        except (ImportError, Exception) as err:
-            if callable(error_clbk):
-                error_clbk(err)
+        # Import the module
+        with original_system(path, reset_modules=reset_modules):
+            module = importlib.import_module(import_chain)  # module = __import__(name)
+        return module
 
 
 INSTALL_TYPES = OrderedDict()

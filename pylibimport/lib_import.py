@@ -214,12 +214,12 @@ class VersionImporter(object):
         """
         install_dir = install_dir or self.install_dir
         python_version = python_version or self.python_version
-        install_path = self.make_import_path('', '', install_dir=install_dir, python_version=python_version)
+        imp_path = self.make_import_path('', '', install_dir=install_dir, python_version=python_version)
 
         exceptions = (AttributeError, ValueError, TypeError, FileNotFoundError, Exception)
         with contextlib.suppress(*exceptions):
-            for name in os.listdir(install_path):
-                package_path = os.path.join(install_path, name)
+            for name in os.listdir(imp_path):
+                package_path = os.path.join(imp_path, name)
                 if (package is None or package == name) and os.path.isdir(package_path):
                     for version in os.listdir(package_path):
                         with contextlib.suppress(*exceptions):
@@ -381,9 +381,9 @@ class VersionImporter(object):
                     name = str(name)
 
         # Get the installed directory
-        directory = self.make_import_path(name, version or '')
+        imp_path = self.make_import_path(name, version or '')
         if version is None:
-            directory = os.path.dirname(directory)
+            imp_path = os.path.dirname(imp_path)
 
         # Remove the library from the installed modules
         try:
@@ -403,7 +403,7 @@ class VersionImporter(object):
 
         # Always delete installed
         try:
-            shutil.rmtree(directory, ignore_errors=True)
+            shutil.rmtree(imp_path, ignore_errors=True)
         except (OSError, Exception):
             # This may not be successful with C extensions.
             # When process is closed and new process tries to delete it should be successful.
@@ -502,7 +502,7 @@ class VersionImporter(object):
                 version = v
 
         # Get the import path (install destination)
-        import_path = self.make_import_path(name, version)
+        imp_path = self.make_import_path(name, version)
 
         # Try to install the package
         install_kwargs = {
@@ -512,10 +512,10 @@ class VersionImporter(object):
             'install_dependencies': self.install_dependencies,
             'extra_install_args': extra_install_args,
             }
-        install_lib(path, import_path, **install_kwargs)
+        install_lib(path, imp_path, **install_kwargs)
 
         # Try to import the installed module
-        return self.import_path(import_path, name, version, import_chain)
+        return self.import_path(imp_path, name, version, import_chain)
 
     def import_module(self, name, version=None, import_chain=None):
         """Import the given module or package."""
@@ -545,8 +545,8 @@ class VersionImporter(object):
             self.init()
 
         # Check if import name is available
-        import_path = self.make_import_path(name, version)
-        module = self.import_path(import_path, name, version, import_chain)
+        imp_path = self.make_import_path(name, version)
+        module = self.import_path(imp_path, name, version, import_chain)
         if module is not None:
             return module
 
@@ -556,11 +556,11 @@ class VersionImporter(object):
         except Exception as err:
             self.error(err)
 
-    def import_path(self, import_path, name=None, version=None, import_chain=None):
+    def import_path(self, imp_path, name=None, version=None, import_chain=None):
         """Import the given path.
 
         Args:
-            import_path (str): Path to import (path to file/folder).
+            imp_path (str): Path to import (path to file/folder).
             name (str)[None]: Name of the package to import.
             version (str)[None]: Version of the package to import. This makes the import name "name_version" if you
                 want to use the normal python import after this.
@@ -571,7 +571,7 @@ class VersionImporter(object):
         """
         # Get name and version
         if name is None or version is None:
-            n, v = self.get_name_version(import_path)
+            n, v = self.get_name_version(imp_path)
             if name is None:
                 name = n
             if version is None:
@@ -586,7 +586,12 @@ class VersionImporter(object):
                 return modules[version]
 
         # Import the path
-        module = import_module(import_path, import_chain, reset_modules=self.reset_modules, error_clbk=self.error)
+        try:
+            module = import_module(imp_path, import_chain, reset_modules=self.reset_modules)
+        except (ImportError, Exception) as err:
+            module = None
+            self.error(err)
+
         if module is not None:
             try:
                 # Save in sys.modules with version
@@ -632,11 +637,11 @@ class LibImportModule(MY_MODULE.__class__):
 
     MAIN_VERSION_IMPORTER = None
 
-    def __call__(self, import_path, name=None, version=None, import_chain=None):
+    def __call__(self, imp_path, name=None, version=None, import_chain=None):
         """Import the given path.
 
         Args:
-            import_path (str): Path to import (path to file/folder).
+            imp_path (str): Path to import (path to file/folder).
             name (str)[None]: Name of the package to import.
             version (str)[None]: Version of the package to import. This makes the import name "name_version" if you
                 want to use the normal python import after this.
@@ -648,7 +653,7 @@ class LibImportModule(MY_MODULE.__class__):
         importer = self.MAIN_VERSION_IMPORTER
         if importer is None:
             importer  = self.MAIN_VERSION_IMPORTER = VersionImporter()
-        return importer.import_path(import_path, name=name, version=version, import_chain=import_chain)
+        return importer.import_path(imp_path, name=name, version=version, import_chain=import_chain)
 
 # Override the module make it callable
 try:
