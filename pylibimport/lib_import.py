@@ -385,19 +385,31 @@ class VersionImporter(object):
         if version is None:
             imp_path = os.path.dirname(imp_path)
 
-        # Remove the library from the installed modules
-        try:
-            if version is None:
-                del self.modules[name]
-            else:
-                del self.modules[name][version]
-        except (KeyError, ValueError, TypeError, Exception):
-            pass
-
         # Remove from sys.modules
         try:
-            import_name = self.make_import_name(name, version)
-            del sys.modules[import_name]
+            del sys.modules[__import_name__]
+        except (AttributeError, KeyError, Exception):
+            pass
+
+        # Remove the library from the installed modules (This object and sys)
+        try:
+            if version is not None:
+                versions = [version]
+            else:
+                versions = list(self.modules[name].keys())
+
+            # Remove versions and modules
+            for ver in versions:
+                with contextlib.suppress(KeyError, AttributeError, Exception):
+                    module = self.modules[name].pop(ver, None)
+                with contextlib.suppress(KeyError, AttributeError, NameError, Exception):
+                    del sys.modules[module.__name__]
+                with contextlib.suppress(KeyError, AttributeError, NameError, Exception):
+                    del sys.modules[module.__package__]
+                with contextlib.suppress(KeyError, AttributeError, NameError, Exception):
+                    del sys.modules[module.__import_name__]
+                with contextlib.suppress(KeyError, AttributeError, NameError, Exception):
+                    del module
         except (KeyError, ValueError, TypeError, Exception):
             pass
 
@@ -596,6 +608,10 @@ class VersionImporter(object):
             try:
                 # Save in sys.modules with version
                 import_name = self.make_import_name(import_chain, version)
+                try:
+                    module.__import_name__ = import_name
+                except (AttributeError, Exception):
+                    pass
                 if not self.reset_modules:
                     self.rename_module(name, import_name)
                 else:
