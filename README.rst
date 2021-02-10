@@ -46,7 +46,25 @@ Import options:
 Example
 =======
 
-Manually call the install and import functions.
+Manually import py files or .pyd files
+
+.. code-block:: python
+
+    import pylibimport
+
+    # Use import chain if import is different from name ('cv2.other' same as "import cv2.other")
+    mymod1 = pylibimport.import_module('./path/to/mymod.cp38-win_amd64.pyd', import_chain='mymod', reset_modules=True)
+    mymod2 = pylibimport.import_module('./path/to/different/mymod.cp38-win_amd64.pyd', import_chain='mymod', reset_modules=True)
+
+    assert mymod1 is not mymod2
+
+
+Pathing is important! If any library with the same name exists on your python path then python will import the wrong
+library. Make sure you cannot import your package name before running 'pylibimport'.
+
+
+The 'pylibimport' library normally installs a package to a specific directory then imports it.
+You can manually call the install and import functions.
 
 .. code-block:: python
 
