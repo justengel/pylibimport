@@ -67,7 +67,7 @@ def import_module(path, import_chain=None, reset_modules=True):
 
     if os.path.exists(path):
         # Import the module
-        with original_system(path, reset_modules=reset_modules):
+        with original_system(os.path.abspath(path), reset_modules=reset_modules):
             module = importlib.import_module(import_chain)  # module = __import__(name)
         return module
 
