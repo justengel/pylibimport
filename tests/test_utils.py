@@ -44,13 +44,13 @@ def test_name_version_py():
 
 def test_name_version_setup_py():
     import pathlib
-    from pylibimport.utils import get_name_version, get_setup_dict
+    from pylibimport.utils import get_name_version, parse_setup
     from pylibimport import __meta__
 
     filename = str(pathlib.Path().absolute().parent.joinpath('setup.py'))
     name, version = None, None
     try:
-        meta = get_setup_dict(filename)
+        meta = parse_setup(filename)
         name, version = meta['name'], meta['version']
     except (ImportError, PermissionError, FileNotFoundError, KeyError, Exception):
         pass
@@ -66,7 +66,7 @@ def test_name_version_setup_py():
 
 def test_name_version_meta():
     import os
-    from pylibimport.utils import get_meta
+    from pylibimport.utils import parse_meta
     from pylibimport import __meta__
 
     filename = '../setup.py'  # Local setup.py
@@ -76,7 +76,7 @@ def test_name_version_meta():
     filename = os.path.dirname(filename)
     for fname in os.listdir(filename):
         try:
-            meta = get_meta(os.path.join(filename, fname, '__meta__.py'))
+            meta = parse_meta(os.path.join(filename, fname, '__meta__.py'))
             name, version = meta['name'], meta['version']
             break
         except (FileNotFoundError, PermissionError, TypeError, KeyError, Exception):

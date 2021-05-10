@@ -1,8 +1,8 @@
 from .__meta__ import version as __version__
 
-from .utils import make_import_name, get_name_version, get_compatibility_tags, \
-    parse_filename, parse_wheel_filename, parse_sdist_filename, \
-    is_compatible, get_meta, get_setup_dict
+from .utils import make_import_name, get_name_version, \
+    normalize_name, is_compatible, get_compatibility_tags, \
+    parse, parse_filename, parse_wheel_filename, parse_sdist_filename, parse_meta, parse_setup
 
 from .run_pip import default_wait_func, \
     find_file, IterProcess, pip_bin, \

@@ -79,6 +79,7 @@ if __name__ == "__main__":
               'packaging>=20.3',
               'requests>=2.18.2',
               'light_process>=0.0.2',
+              'package_parser>=1.0.1',
               ],
           extras_require={
               },
