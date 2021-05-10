@@ -223,14 +223,16 @@ def zip_install(path, dest, *args, **kwargs):
     # Extract to zip
     try:
         shutil.unpack_archive(path, dest)
-        # DO NOT NEED TO MOVE UP ONE DIRECTORY ANYMORE
-        # if not any(p == name for p in os.listdir(dest)):
-        #     # Move items up one directory
-        #     for p in os.listdir(dest):
-        #         nested_path = os.path.join(dest, p)
-        #         for np in os.listdir(nested_path):
-        #             shutil.move(os.path.join(nested_path, np), os.path.join(dest, np))
-        #         # shutil.rmtree(nested_path)
+
+        # Check if package name not in extracted directory and move up one directory
+        name, _ = get_name_version(path)
+        if not any(p == name for p in os.listdir(dest)):
+            # Move items up one directory
+            for p in os.listdir(dest):
+                nested_path = os.path.join(dest, p)
+                for np in os.listdir(nested_path):
+                    shutil.move(os.path.join(nested_path, np), os.path.join(dest, np))
+                shutil.rmtree(nested_path)
     except (ValueError, TypeError, AttributeError, OSError, Exception) as err:
         raise InstallError('Failed to install "{}"'.format(path)) from err
     return True
