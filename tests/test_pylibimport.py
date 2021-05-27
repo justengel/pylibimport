@@ -1,4 +1,5 @@
 import os
+import sys
 
 
 def make_importer():
@@ -164,6 +165,18 @@ def test_download():
     assert not os.path.exists(filename)
 
 
+def test_contained_modules():
+    from pylibimport.install import import_module
+
+    # Save modules that this import uses
+    dependent_modules = {}
+    custom = import_module('./sub/import_dir/custom.py', reset_modules=True, clean_modules=True,
+                           contained_modules=dependent_modules)
+    assert custom is not None
+    assert 'functools' in dependent_modules
+    assert list(sys.modules.keys()) != list(dependent_modules.keys())
+
+
 if __name__ == '__main__':
     test_available_modules()
     test_find_module()
@@ -176,5 +189,7 @@ if __name__ == '__main__':
     test_whl_install()
 
     test_download()
+
+    test_contained_modules()
 
     print('All tests finished successfully!')

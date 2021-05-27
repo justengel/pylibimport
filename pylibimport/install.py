@@ -21,12 +21,13 @@ class InstallError(Exception):
 
 
 @contextlib.contextmanager
-def original_system(new_path=None, reset_modules=True):
+def original_system(new_path=None, reset_modules=True, clean_modules=False, **kwargs):
     """Context manager to reset sys.path and sys.modules to the previous state before the context operation.
 
     Args:
         new_path (str)[None]: Temporarily add a path to sys.path before the operation.
         reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
+        clean_modules (bool)[False]: If True reset sys.modules before the context block is run.
     """
     modules = sys.modules.copy()
     paths = copy.copy(sys.path)
@@ -35,6 +36,10 @@ def original_system(new_path=None, reset_modules=True):
     # Temporarily add the new path
     if new_path and new_path not in sys.path:
         sys.path.insert(0, new_path)
+
+    if clean_modules:
+        sys.modules.clear()
+        sys.path_importer_cache = {}
 
     yield
 
@@ -46,13 +51,15 @@ def original_system(new_path=None, reset_modules=True):
     sys.path_importer_cache = path_cache
 
 
-def import_module(path, import_chain=None, reset_modules=True):
+def import_module(path, import_chain=None, reset_modules=True, clean_modules=False, contained_modules=None):
     """Import the given module name from the given import path.
 
     Args:
         path (str): Directory which contains the module to import.
         import_chain (str): Chain to import with.
         reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
+        clean_modules (bool)[False]: If True reset sys.modules before importing the module.
+        contained_modules (dict)[None]: If a dict is given save all imported modules to this dictionary.
 
     Returns:
         module (ModuleType): Module object that was imported.
@@ -67,8 +74,11 @@ def import_module(path, import_chain=None, reset_modules=True):
 
     if os.path.exists(path):
         # Import the module
-        with original_system(os.path.abspath(path), reset_modules=reset_modules):
+        with original_system(os.path.abspath(path), reset_modules=reset_modules, clean_modules=clean_modules):
             module = importlib.import_module(import_chain)  # module = __import__(name)
+            if isinstance(contained_modules, dict):
+                contained_modules.update(sys.modules)
+
         return module
 
 
@@ -240,7 +250,7 @@ def zip_install(path, dest, *args, **kwargs):
 
 @register_install_type('.whl')
 def whl_install(path, dest, *args, pip=None, extra_install_args=None, install_dependencies=False, wait_func=None,
-                reset_modules=True, **kwargs):
+                reset_modules=True, contained_modules=None, **kwargs):
     """Import whl or zip files and return the installed module.
 
     Args:
@@ -253,6 +263,7 @@ def whl_install(path, dest, *args, pip=None, extra_install_args=None, install_de
         install_dependencies (bool)[False]: If True .whl files will install dependencies into the install_dir.
         wait_func (callable/function)[None]: Function called while waiting for pip to finish (passed into pip).
         reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
+        contained_modules (dict)[None]: If given and reset_modules save all imported modules to this dictionary.
 
     Returns:
         installed (bool): If True it was installed this time. If False directory already existed.
@@ -271,7 +282,7 @@ def whl_install(path, dest, *args, pip=None, extra_install_args=None, install_de
         os.makedirs(dest, exist_ok=True)
     except:
         pass
-    with original_system(dest, reset_modules=reset_modules):
+    with original_system(dest, reset_modules=reset_modules, contained_modules=contained_modules):
         args = ['install', '--target', dest] + extra_install_args + [path]
         if not install_dependencies:
             args.insert(1, '--no-deps')

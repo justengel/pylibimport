@@ -48,7 +48,7 @@ class VersionImporter(object):
     remove_install_type = staticmethod(remove_install_type)
 
     def __init__(self, download_dir=None, install_dir=None, index_url='https://pypi.org/simple/', python_version=None,
-                 install_dependencies=False, reset_modules=True, **kwargs):
+                 install_dependencies=False, reset_modules=True, clean_modules=False, contained_modules=None, **kwargs):
         """Initialize the library
 
         Args:
@@ -57,8 +57,9 @@ class VersionImporter(object):
             index_url (str)['https://pypi.org/simple/']: Index url for downloading files.
             python_version (str)[None]: Python version indicator used for the installation path (import_path).
             install_dependencies (bool)[False]: If True .whl files will install dependencies into the install_dir.
-            reset_modules (bool)[True]: Reset the state of sys.modules after importing.
-                Dependencies will not be loaded into sys.modules.
+            reset_modules (bool)[True]: Reset the state of sys.modules after importing. Dependencies will not be loaded into sys.modules.
+            clean_modules (bool)[False]: If True reset sys.modules before importing the module.
+            contained_modules (dict)[None]: If a dict is given save all imported modules to this dictionary.
             **kwargs (dict): Unused given named arguments.
         """
         if python_version is None:
@@ -70,6 +71,8 @@ class VersionImporter(object):
         self.index_url = index_url
         self.install_dependencies = install_dependencies
         self.reset_modules = reset_modules
+        self.clean_modules = clean_modules
+        self.contained_modules = contained_modules
         self.modules = {}
 
         if download_dir is not None:
@@ -568,7 +571,8 @@ class VersionImporter(object):
         except Exception as err:
             self.error(err)
 
-    def import_path(self, imp_path, name=None, version=None, import_chain=None):
+    def import_path(self, imp_path, name=None, version=None, import_chain=None,
+                    reset_modules=None, clean_modules=None, contained_modules=None):
         """Import the given path.
 
         Args:
@@ -577,10 +581,20 @@ class VersionImporter(object):
             version (str)[None]: Version of the package to import. This makes the import name "name_version" if you
                 want to use the normal python import after this.
             import_chain (str)[None]: Import chain ("custom.run_custom" to just import the function).
+            reset_modules (bool)[None]: If True reset sys.modules back to the original sys.modules.
+            clean_modules (bool)[None]: If True reset sys.modules before the context block is run.
+            contained_modules (dict)[None]: If given and reset_modules save all imported modules to this dictionary.
 
         Returns:
             module (types.ModuleType/function/object): Object that was imported.
         """
+        if reset_modules is None:
+            reset_modules = self.reset_modules
+        if clean_modules is None:
+            clean_modules = self.clean_modules
+        if contained_modules is None:
+            contained_modules = self.contained_modules
+
         # Get name and version
         if name is None or version is None:
             n, v = self.get_name_version(imp_path)
@@ -599,7 +613,8 @@ class VersionImporter(object):
 
         # Import the path
         try:
-            module = import_module(imp_path, import_chain, reset_modules=self.reset_modules)
+            module = import_module(imp_path, import_chain, reset_modules=reset_modules, clean_modules=clean_modules,
+                                   contained_modules=contained_modules)
         except (ImportError, Exception) as err:
             module = None
             self.error(err)
@@ -653,7 +668,8 @@ class LibImportModule(MY_MODULE.__class__):
 
     MAIN_VERSION_IMPORTER = None
 
-    def __call__(self, imp_path, name=None, version=None, import_chain=None):
+    def __call__(self, imp_path, name=None, version=None, import_chain=None,
+                 reset_modules=None, clean_modules=None, contained_modules=None):
         """Import the given path.
 
         Args:
@@ -662,6 +678,9 @@ class LibImportModule(MY_MODULE.__class__):
             version (str)[None]: Version of the package to import. This makes the import name "name_version" if you
                 want to use the normal python import after this.
             import_chain (str)[None]: Import chain ("custom.run_custom" to just import the function).
+            reset_modules (bool)[None]: If True reset sys.modules back to the original sys.modules.
+            clean_modules (bool)[None]: If True reset sys.modules before the context block is run.
+            contained_modules (dict)[None]: If given and reset_modules save all imported modules to this dictionary.
 
         Returns:
             module (types.ModuleType/function/object): Object that was imported.
@@ -669,7 +688,9 @@ class LibImportModule(MY_MODULE.__class__):
         importer = self.MAIN_VERSION_IMPORTER
         if importer is None:
             importer  = self.MAIN_VERSION_IMPORTER = VersionImporter()
-        return importer.import_path(imp_path, name=name, version=version, import_chain=import_chain)
+        return importer.import_path(imp_path, name=name, version=version, import_chain=import_chain,
+                                    reset_modules=reset_modules, clean_modules=clean_modules,
+                                    contained_modules=contained_modules)
 
 # Override the module make it callable
 try:
