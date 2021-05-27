@@ -35,7 +35,7 @@ if __name__ == "__main__":
     author = meta['author']
     author_email = meta['author_email']
     keywords = 'python version import libimport library version_import'
-    packages = find_packages(exclude=('tests', 'docs', 'bin'))
+    packages = find_packages(exclude=('tests', 'docs', 'bin', 'pyinstaller_hooks'))
 
     # Extensions
     extensions = [
