@@ -104,11 +104,33 @@ VersionImporter manager class
     importer.delete_installed(custom)
     importer.delete_installed(custom_1_0_0)
 
+Finder / Loader
+~~~~~~~~~~~~~~~
+
+This library has finder and loader support. To use the normal python import system.
+
+.. code-block:: python
+
+    # run_finder_loader.py
+
+    # sub
+    # sub/import_dir
+    # sub/import_dir/dynamicmethod-1.0.2.tar.gz
+    # sub/import_dir/dynamicmethod-1.0.3.tar.gz
+    # sub/target_dir
+    import pylibimport
+    pylibimport.init_finder(download_dir='./sub/import_dir/', install_dir='./sub/target_dir')
+
+    import dynamicmethod_1_0_2
+    import dynamicmethod_1_0_3
+
+    assert dynamicmethod_1_0_2 is not dynamicmethod_1_0_3
+
 
 Multiple Files
 ~~~~~~~~~~~~~~
 
-This library also works across multiple files.
+This library also works across multiple files. This functionality can be replaced with the finder/loader support.
 
 .. code-block:: python
 

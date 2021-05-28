@@ -18,6 +18,7 @@ from .install import InstallError, original_system, import_module, install_lib, 
     is_python_package, py_install, is_zip, zip_install, whl_install
 
 from .lib_import import VersionImporter
+from .finder_loader import init_finder, init_loader, loader
 
 
 __all__ = [
@@ -51,4 +52,7 @@ __all__ = [
     # lib_import
     'lib_import',  # Callable module
     'VersionImporter',
+
+    # Finder/Loader
+    'init_finder', 'init_loader', 'loader',
     ]
