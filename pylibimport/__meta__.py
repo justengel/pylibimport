@@ -1,5 +1,5 @@
 name = 'pylibimport'
-version = '1.8.3'
+version = '1.9.0'
 description = 'Python utility for importing packages with the same name, but different version.'
 url = 'https://github.com/justengel/pylibimport'
 author = 'Justin Engel'
