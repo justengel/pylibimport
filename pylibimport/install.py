@@ -20,6 +20,15 @@ class InstallError(Exception):
     pass
 
 
+DEFAULT_MODULES = [  # sys.builtin_module_names  # (builtin_module_names doesn't work unfortunately)
+    'sys', 'builtins', '_frozen_importlib', '_imp', '_warnings', '_frozen_importlib_external', '_io', 'marshal', 'nt',
+    '_thread', '_weakref', 'winreg', 'time', 'zipimport', '_codecs', 'codecs', 'encodings.aliases', 'encodings',
+    'encodings.utf_8', 'encodings.cp1252', '_signal', '__main__', 'encodings.latin_1', '_abc', 'abc', 'io', '_stat',
+    'stat', '_collections_abc', 'genericpath', 'ntpath', 'os.path', 'os', '_sitebuiltins', '_locale', '_bootlocale',
+    'site', 'atexit'
+    ]
+
+
 @contextlib.contextmanager
 def original_system(new_path=None, reset_modules=True, clean_modules=False, **kwargs):
     """Context manager to reset sys.path and sys.modules to the previous state before the context operation.
@@ -39,7 +48,12 @@ def original_system(new_path=None, reset_modules=True, clean_modules=False, **kw
 
     if clean_modules:
         sys.modules.clear()
-        sys.path_importer_cache = {}
+        # sys.path_importer_cache = {}  # Do I need this?
+        for pkg in DEFAULT_MODULES:
+            try:
+                sys.modules[pkg] = modules[pkg]
+            except (AttributeError, KeyError, Exception):
+                pass
 
     yield
 
