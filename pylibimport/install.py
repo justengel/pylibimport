@@ -7,6 +7,7 @@ import contextlib
 import importlib
 from collections import OrderedDict
 
+from pylibimp import original_system, import_module
 from pylibimport.utils import get_name_version
 from pylibimport.run_pip import default_wait_func, pip_main
 
@@ -18,82 +19,6 @@ __all__ = ['InstallError', 'original_system', 'import_module', 'install_lib',
 
 class InstallError(Exception):
     pass
-
-
-DEFAULT_MODULES = [  # sys.builtin_module_names  # (builtin_module_names doesn't work unfortunately)
-    'sys', 'builtins', '_frozen_importlib', '_imp', '_warnings', '_frozen_importlib_external', '_io', 'marshal', 'nt',
-    '_thread', '_weakref', 'winreg', 'time', 'zipimport', '_codecs', 'codecs', 'encodings.aliases', 'encodings',
-    'encodings.utf_8', 'encodings.cp1252', '_signal', '__main__', 'encodings.latin_1', '_abc', 'abc', 'io', '_stat',
-    'stat', '_collections_abc', 'genericpath', 'ntpath', 'os.path', 'os', '_sitebuiltins', '_locale', '_bootlocale',
-    'site', 'atexit'
-    ]
-
-
-@contextlib.contextmanager
-def original_system(new_path=None, reset_modules=True, clean_modules=False, **kwargs):
-    """Context manager to reset sys.path and sys.modules to the previous state before the context operation.
-
-    Args:
-        new_path (str)[None]: Temporarily add a path to sys.path before the operation.
-        reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
-        clean_modules (bool)[False]: If True reset sys.modules before the context block is run.
-    """
-    modules = sys.modules.copy()
-    paths = copy.copy(sys.path)
-    path_cache = sys.path_importer_cache.copy()
-
-    # Temporarily add the new path
-    if new_path and new_path not in sys.path:
-        sys.path.insert(0, new_path)
-
-    if clean_modules:
-        sys.modules.clear()
-        # sys.path_importer_cache = {}  # Do I need this?
-        for pkg in DEFAULT_MODULES:
-            try:
-                sys.modules[pkg] = modules[pkg]
-            except (AttributeError, KeyError, Exception):
-                pass
-
-    yield
-
-    if reset_modules:
-        # sys.modules = modules  # For some reason this causes conflicts with relative imports?
-        sys.modules.clear()
-        sys.modules.update(modules)
-    sys.path = paths
-    sys.path_importer_cache = path_cache
-
-
-def import_module(path, import_chain=None, reset_modules=True, clean_modules=False, contained_modules=None):
-    """Import the given module name from the given import path.
-
-    Args:
-        path (str): Directory which contains the module to import.
-        import_chain (str): Chain to import with.
-        reset_modules (bool)[True]: If True reset sys.modules back to the original sys.modules.
-        clean_modules (bool)[False]: If True reset sys.modules before importing the module.
-        contained_modules (dict)[None]: If a dict is given save all imported modules to this dictionary.
-
-    Returns:
-        module (ModuleType): Module object that was imported.
-
-    Raises:
-        ImportError: If the import is unsuccessful.
-    """
-    if import_chain is None:
-        import_chain, _ = get_name_version(path)
-    if os.path.isfile(path):
-        path = os.path.dirname(path)
-
-    if os.path.exists(path):
-        # Import the module
-        with original_system(os.path.abspath(path), reset_modules=reset_modules, clean_modules=clean_modules):
-            module = importlib.import_module(import_chain)  # module = __import__(name)
-            if isinstance(contained_modules, dict):
-                contained_modules.update(sys.modules)
-
-        return module
 
 
 INSTALL_TYPES = OrderedDict()

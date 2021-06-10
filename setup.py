@@ -76,6 +76,7 @@ if __name__ == "__main__":
 
           # options to install extra requirements
           install_requires=[
+              'pylibimp>=1.0.1',
               'packaging>=20.3',
               'requests>=2.18.2',
               'light_process>=0.0.2',

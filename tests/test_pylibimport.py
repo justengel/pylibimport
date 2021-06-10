@@ -171,7 +171,7 @@ def test_contained_modules():
     # Save modules that this import uses
     dependent_modules = {}
     custom = import_module('./sub/import_dir/custom.py', reset_modules=True, clean_modules=True,
-                           contained_modules=dependent_modules)
+                           dependent_modules=dependent_modules)
     assert custom is not None
     assert 'functools' in dependent_modules
     assert list(sys.modules.keys()) != list(dependent_modules.keys())
