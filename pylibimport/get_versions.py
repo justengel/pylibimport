@@ -14,10 +14,12 @@ from pylibimport.utils import get_name_version, get_compatibility_tags, is_compa
 __all__ = ['uri_exists', 'HttpListVersions']
 
 
-def uri_exists(uri):
+def uri_exists(uri, timeout=None, **kwargs):
     """Return if the given URI exists."""
+    if timeout is not None:
+        kwargs['timeout'] = timeout
     try:  # Faster check if url exists
-        status_code = urlopen(uri).getcode()
+        status_code = urlopen(uri, **kwargs).getcode()
         if 400 <= status_code < 500:
             raise ValueError('{} Client Error: Invalid url: {}'.format(status_code, uri))
         elif 500 <= status_code <= 600:
@@ -25,15 +27,6 @@ def uri_exists(uri):
         return True
     except (TypeError, ValueError, Exception):
         return False
-    # try:
-    #     with requests.get(str(uri), stream=True) as response:
-    #         try:
-    #             response.raise_for_status()
-    #             return True
-    #         except requests.exceptions.HTTPError:
-    #             return False
-    # except requests.exceptions.ConnectionError:
-    #     return False
 
 
 class HttpListVersions(HTMLParser):

@@ -426,9 +426,9 @@ class VersionImporter(object):
 
     delete_module = delete_installed
 
-    def uri_exists(self, index_url=None):
+    def uri_exists(self, index_url=None, timeout=None, **kwargs):
         """Return if the given URL/URI exists."""
-        return uri_exists(index_url or self.index_url)
+        return uri_exists(index_url or self.index_url, timeout=timeout, **kwargs)
 
     def install_downloaded(self, package, version=None):
         """Install a downloaded package.
